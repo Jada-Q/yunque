@@ -270,6 +270,96 @@ function resetTraffic(t) {
   lampLight.position.set(-6.2, 2.85, -7.2); scene.add(lampLight);
 }
 
+// ---------- 生灵：云鲸 / 巨鸟 / 鸟群 / 船员 ----------
+const creatures = {
+  lev: null, levState: { wait: 30, active: false, vel: new THREE.Vector3(), phase: 0 },
+  roc: null, rocWings: [], flocks: [], crew: [],
+};
+function resetLev() {
+  creatures.levState.wait = 35 + Math.random() * 60;
+  creatures.levState.active = false;
+  if (creatures.lev) creatures.lev.visible = false;
+}
+function spawnLev() {
+  const L = creatures.levState;
+  const sgn = Math.random() < 0.5 ? 1 : -1;
+  creatures.lev.position.set(-70 - Math.random() * 160, CFG.cloudY - 2, -sgn * 340);
+  const dir = new THREE.Vector3(0, 0, sgn);
+  creatures.lev.rotation.y = Math.atan2(dir.z, -dir.x); // 鲸首朝 -X
+  L.vel = dir.multiplyScalar(5 + Math.random() * 3);
+  L.phase = Math.random() * 6;
+  L.active = true;
+  creatures.lev.scale.setScalar(0.8 + Math.random() * 0.5);
+  creatures.lev.visible = true;
+}
+{
+  const gl2 = new GLTFLoader();
+  gl2.load('/models/leviathan.glb', g => {
+    toonify(g.scene); addOutline(g.scene, 1.02);
+    g.scene.visible = false;
+    creatures.lev = g.scene;
+    scene.add(g.scene);
+  }, undefined, () => {});
+  gl2.load('/models/roc.glb', g => {
+    toonify(g.scene); addOutline(g.scene, 1.04);
+    creatures.roc = g.scene;
+    creatures.rocWings = [g.scene.getObjectByName('wingL'), g.scene.getObjectByName('wingR')].filter(Boolean);
+    scene.add(g.scene);
+  }, undefined, () => {});
+  gl2.load('/models/crew.glb', g => {
+    toonify(g.scene); addOutline(g.scene, 1.03);
+    const routes = [ // 甲板巡走路线 [起点, 终点]
+      { a: [-8, 6.5], b: [6, 6.5] },
+      { a: [3, -6.8], b: [-9, -6.8] },
+      { a: [8.5, -3], b: [8.5, 3] },  // 艉部栈桥口值守
+    ];
+    routes.forEach((r, i) => {
+      const c = g.scene.clone(true);
+      c.position.set(r.a[0], 0, r.a[1]);
+      scene.add(c);
+      creatures.crew.push({ obj: c, a: r.a, b: r.b, t: 'b', pause: i * 2, speed: 0.85 + i * 0.15 });
+    });
+  }, undefined, () => {});
+}
+// 鸟群（纯代码：双翼片小黑鸟 V 队）
+function resetFlock(f) {
+  f.wait = 12 + Math.random() * 25;
+  f.g.visible = false;
+  const sgn = Math.random() < 0.5 ? 1 : -1;
+  f.g.position.set(-25 - Math.random() * 115, 4 + Math.random() * 18, -sgn * (180 + Math.random() * 80));
+  const dir = new THREE.Vector3((Math.random() - 0.5) * 0.3, 0, sgn).normalize();
+  f.vel = dir.clone().multiplyScalar(6.5 + Math.random() * 3);
+  f.g.rotation.y = Math.atan2(dir.x, dir.z);
+}
+function makeFlock() {
+  const g = new THREE.Group();
+  const bm = new THREE.MeshBasicMaterial({ color: 0x232a38, side: THREE.DoubleSide });
+  const birds = [];
+  const N = 9 + ((Math.random() * 5) | 0);
+  for (let i = 0; i < N; i++) {
+    const b = new THREE.Group();
+    for (const s of [-1, 1]) {
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.32), bm);
+      w.position.x = s * 0.45;
+      w.rotation.x = -Math.PI / 2;
+      w.userData.s = s;
+      b.add(w);
+    }
+    const row = Math.ceil((i + 1) / 2), side = i % 2 ? 1 : -1;
+    b.position.set(side * row * 1.5 + (Math.random() - 0.5) * 0.4,
+      (Math.random() - 0.5) * 0.6, -(row * 1.7) + (Math.random() - 0.5) * 0.5);
+    b.userData.ph = Math.random() * 6;
+    g.add(b);
+    birds.push(b);
+  }
+  scene.add(g);
+  const f = { g, birds, vel: new THREE.Vector3(), wait: 0 };
+  resetFlock(f);
+  f.wait = 4 + Math.random() * 12;
+  return f;
+}
+creatures.flocks = [makeFlock(), makeFlock()];
+
 // ---------- 远处浮塔群（Blender 三型实例化；基座没入云海） ----------
 {
   const TOWER_SPOTS = [ // [型, x, z, 缩放, 朝向]
@@ -533,6 +623,54 @@ function tick() {
     if (Math.abs(t.obj.position.x) > 380 || Math.abs(t.obj.position.z) > 380) resetTraffic(t);
   }
 
+  // --- 生灵 ---
+  if (creatures.lev) {
+    const L = creatures.levState;
+    if (L.active) {
+      creatures.lev.position.addScaledVector(L.vel, dt);
+      creatures.lev.position.y = CFG.cloudY - 2 + Math.sin(elapsed * 0.25 + L.phase) * 4.5; // 时浮时沉
+      creatures.lev.rotation.z = Math.sin(elapsed * 0.2 + L.phase) * 0.05;
+      if (Math.abs(creatures.lev.position.z) > 360 || Math.abs(creatures.lev.position.x) > 360) resetLev();
+    } else {
+      L.wait -= dt;
+      if (L.wait <= 0) spawnLev();
+    }
+  }
+  if (creatures.roc) { // 绕塔盘旋
+    const ra = elapsed * 0.16;
+    creatures.roc.position.set(-120 + Math.cos(ra) * 34, 16 + Math.sin(elapsed * 0.5) * 2.5, 20 + Math.sin(ra) * 34);
+    creatures.roc.rotation.y = Math.atan2(-Math.sin(ra), Math.cos(ra));
+    creatures.roc.rotation.z = 0.18; // 内倾
+    const flap = Math.sin(elapsed * 2.1) * 0.45;
+    if (creatures.rocWings[0]) creatures.rocWings[0].rotation.z = flap;
+    if (creatures.rocWings[1]) creatures.rocWings[1].rotation.z = -flap;
+  }
+  for (const f of creatures.flocks) {
+    if (f.wait > 0) { f.wait -= dt; continue; }
+    f.g.visible = true;
+    f.g.position.addScaledVector(f.vel, dt);
+    for (const b of f.birds) {
+      const w = Math.sin(elapsed * 7 + b.userData.ph) * 0.55;
+      for (const wg of b.children) wg.rotation.z = wg.userData.s * w;
+    }
+    if (Math.abs(f.g.position.z) > 320 || Math.abs(f.g.position.x) > 320) resetFlock(f);
+  }
+  for (const c of creatures.crew) { // 甲板巡走
+    if (c.pause > 0) { c.pause -= dt; continue; }
+    const tgt = c.t === 'b' ? c.b : c.a;
+    const dx = tgt[0] - c.obj.position.x, dz = tgt[1] - c.obj.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.15) {
+      c.t = c.t === 'b' ? 'a' : 'b';
+      c.pause = 2 + Math.random() * 5;
+      continue;
+    }
+    c.obj.position.x += dx / d * c.speed * dt;
+    c.obj.position.z += dz / d * c.speed * dt;
+    c.obj.rotation.y = Math.atan2(dx, dz);
+    c.obj.position.y = Math.abs(Math.sin(elapsed * 6)) * 0.03; // 步伐微颠
+  }
+
   composer.render();
   requestAnimationFrame(tick);
 }
@@ -548,5 +686,5 @@ addEventListener('resize', () => {
 toonify(scene);
 addOutline(scene);
 
-window.__yunque = { player, camera, scene, renderer, composer, state, PADS, UPDRAFT, traffic, resetTraffic };
+window.__yunque = { player, camera, scene, renderer, composer, state, PADS, UPDRAFT, traffic, resetTraffic, creatures, spawnLev };
 tick();
