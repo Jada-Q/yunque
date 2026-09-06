@@ -102,31 +102,39 @@ const cloudSprites = []; // 供缓漂动画
   layer(CFG.cloudY - 8, 0x64789a, 1.0, 1300);
   layer(CFG.cloudY + 5, 0xc4d0e2, 0.14, 1300); // 云面上的薄霭（廉价体积感）
   // 云片 billboard：柔边贴图，近团 + 全向远脊两波
-  const tex = cloudTexture();
-  const nearMats = Array.from({ length: 6 }, (_, i) => new THREE.SpriteMaterial({
-    map: tex, transparent: true, opacity: 0.92, depthWrite: false,
-    rotation: (i - 3) * 0.16, color: 0xeef2f8, fog: true,
+  // 双贴图消除重复感；每朵大云顶上再叠一层顶冠 → 积云的体量
+  const texA = cloudTexture(7), texB = cloudTexture(23);
+  const mkMats = (tex, color, fog, n, op) => Array.from({ length: n }, (_, i) => new THREE.SpriteMaterial({
+    map: tex, transparent: true, opacity: op, depthWrite: false,
+    rotation: (i - n / 2) * 0.14, color, fog,
   }));
-  const farMats = Array.from({ length: 4 }, (_, i) => new THREE.SpriteMaterial({
-    map: tex, transparent: true, opacity: 0.88, depthWrite: false,
-    rotation: (i - 2) * 0.12, color: 0xaebfd6, fog: false, // 远云堤不受雾：月光云山
-  }));
-  const addCloud = (mats, x, z, s, yJit = 0) => {
+  const nearMats = [...mkMats(texA, 0xeef2f8, true, 4, 0.92), ...mkMats(texB, 0xe6ecf6, true, 4, 0.9)];
+  const farMats = [...mkMats(texA, 0xaebfd6, false, 3, 0.88), ...mkMats(texB, 0xa4b6d0, false, 3, 0.86)];
+  const addCloud = (mats, x, z, s, yJit = 0, cap = true) => {
     const sp = new THREE.Sprite(mats[(Math.random() * mats.length) | 0]);
-    sp.position.set(x, CFG.cloudY + 2.5 + yJit, z);
-    sp.scale.set(s, s * 0.42, 1);
+    sp.position.set(x, CFG.cloudY + 2.5 + yJit + s * 0.06, z);
+    sp.scale.set(s, s * 0.46, 1);
     sp.userData.baseX = x;
     sp.userData.ph = Math.random() * 6;
     cloudSprites.push(sp);
     scene.add(sp);
+    if (cap && s > 34) { // 顶冠：隆起的第二层
+      const cp = new THREE.Sprite(mats[(Math.random() * mats.length) | 0]);
+      cp.position.set(x + (Math.random() - 0.5) * s * 0.2, sp.position.y + s * 0.17, z + 1);
+      cp.scale.set(s * 0.52, s * 0.28, 1);
+      cp.userData.baseX = cp.position.x;
+      cp.userData.ph = sp.userData.ph + 0.6;
+      cloudSprites.push(cp);
+      scene.add(cp);
+    }
   };
-  for (let i = 0; i < 70; i++) {
-    const a = Math.random() * Math.PI * 2, d = 22 + Math.random() * 150;
-    addCloud(nearMats, Math.cos(a) * d - 10, Math.sin(a) * d, 16 + Math.random() * 44, Math.random() * 3);
+  for (let i = 0; i < 60; i++) {
+    const a = Math.random() * Math.PI * 2, d = 24 + Math.random() * 150;
+    addCloud(nearMats, Math.cos(a) * d - 10, Math.sin(a) * d, 26 + Math.random() * 56, Math.random() * 3);
   }
-  for (let i = 0; i < 44; i++) {
-    const a = Math.random() * Math.PI * 2, d = 240 + Math.random() * 220;
-    addCloud(farMats, Math.cos(a) * d, Math.sin(a) * d, 70 + Math.random() * 130, 2 + Math.random() * 10);
+  for (let i = 0; i < 40; i++) {
+    const a = Math.random() * Math.PI * 2, d = 250 + Math.random() * 220;
+    addCloud(farMats, Math.cos(a) * d, Math.sin(a) * d, 110 + Math.random() * 150, 2 + Math.random() * 12);
   }
 }
 
@@ -895,10 +903,11 @@ function tick() {
   const k = 1 - Math.exp(-5 * dt);
 
   if (state.mode === 'walk') {
+    // 甲板相机在 +z 后方朝 -z 看：屏幕上 = -z、屏幕右 = +x（2026-09-06 校准，此前两轴皆反）
     dir.set(
-      (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0),
+      (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0) - (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0),
       0,
-      (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0)
+      (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0) - (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0)
     );
     if (dir.lengthSq() > 0) {
       dir.normalize().multiplyScalar(CFG.playerSpeed * dt);
