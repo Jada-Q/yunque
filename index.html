@@ -16,6 +16,13 @@
   <div id="app"></div>
   <div id="keys">WASD / 方向键 移动 · 空格 起飞 · 滑翔：↓或W 俯冲降 / ↑或S 拉升 / ←→或AD 转向 · 飞近星球会被引力接住 · 星球上空格再启程</div>
   <div id="toast" style="position:fixed;left:50%;top:30%;transform:translateX(-50%);color:#dfe6f2;font-size:26px;letter-spacing:.3em;opacity:0;transition:opacity .5s;pointer-events:none;font-family:ui-serif,'Songti SC',serif;"></div>
+  <div id="dlg" style="position:fixed;left:50%;bottom:9%;transform:translateX(-50%);width:min(680px,86vw);
+    background:rgba(10,14,24,.85);border:1px solid rgba(143,168,184,.55);border-radius:10px;
+    padding:18px 26px 14px;display:none;font-family:ui-serif,'Songti SC',serif;cursor:pointer;">
+    <div id="dlg-name" style="color:#8fa8b8;font-size:13px;letter-spacing:.35em;margin-bottom:8px;"></div>
+    <div id="dlg-text" style="color:#e8eef8;font-size:19px;line-height:1.9;letter-spacing:.08em;min-height:2em;"></div>
+    <div style="color:#5c6b7a;font-size:11px;text-align:right;letter-spacing:.2em;margin-top:6px;">点击 / 空格 继续</div>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

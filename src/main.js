@@ -458,6 +458,7 @@ makePlanet({
     const her = makeFigure(0x6e5a4a, 'kneel');
     onSurface(her, r, 0, 0.06);
     g.add(her);
+    g.userData.inhabitant = her;
     // 几块她擦过的地方泛着光斑
     for (let i = 0; i < 6; i++) {
       const patch = new THREE.Mesh(new THREE.CircleGeometry(0.5 + Math.random() * 0.5, 10),
@@ -511,6 +512,7 @@ makePlanet({
     const listener = makeFigure(0x3a4763, 'sit');
     onSurface(listener, r, Math.PI / 2 - 0.34, 0.4);
     g.add(listener);
+    g.userData.inhabitant = listener;
     // 月光青的星：淡青顶光 + 沉过的话化成的萤光
     const ml = new THREE.PointLight(0x9fd8e8, 18, 26, 1.8);
     ml.position.set(0, r + 7, 0);
@@ -605,6 +607,84 @@ const wadeFoam = new THREE.Mesh(
 );
 wadeFoam.visible = false;
 scene.add(wadeFoam);
+
+// 居民正式模型：替换占位小人（保留原位姿态）
+{
+  const swapInhabitant = (planetName, file) => {
+    new GLTFLoader().load(`/models/${file}`, (g) => {
+      const P = PLANETS.find(p => p.name === planetName);
+      const old = P?.group.userData.inhabitant;
+      if (!old) return;
+      g.scene.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      toonify(g.scene);
+      addOutline(g.scene, 1.03);
+      g.scene.position.copy(old.position);
+      g.scene.quaternion.copy(old.quaternion);
+      P.group.remove(old);
+      P.group.add(g.scene);
+      P.group.userData.inhabitant = g.scene;
+    }, undefined, () => {});
+  };
+  swapInhabitant('井星', 'listener.glb');
+  swapInhabitant('拭星', 'wiper.glb');
+}
+
+// ---------- 对话：与居民碰面，点击对方听这颗星的故事 ----------
+const STORY = {
+  '井星': { name: '倾 听 者', lines: [
+    '你也带着没说出口的话吧。',
+    '在这里，话不用说给谁听。投进井里就好。',
+    '我坐在这儿，替井听着。每一句沉下去的话，都会变成一点光。',
+    '水一年比一年亮。你看——都还在，一句也没丢。',
+  ]},
+  '拭星': { name: '擦 拭 者', lines: [
+    '这颗星，我擦了很多年了。',
+    '总有人问：擦完那天，你打算做什么？',
+    '擦不完的。灰会再落下来，亮过的会再蒙上。',
+    '可你看擦过的地方——星光落在上面，会多停一会儿。',
+    '这就够了。不急，我们慢慢擦。',
+  ]},
+};
+const dlgState = { open: false, planet: null, idx: 0 };
+const dlgEl = document.getElementById('dlg');
+const dlgName = document.getElementById('dlg-name');
+const dlgText = document.getElementById('dlg-text');
+function openDialogue(P) {
+  const s = STORY[P.name];
+  if (!s) return;
+  dlgState.open = true;
+  dlgState.planet = P;
+  dlgState.idx = 0;
+  dlgName.textContent = s.name + ' · ' + P.name;
+  dlgText.textContent = s.lines[0];
+  dlgEl.style.display = 'block';
+}
+function advanceDialogue() {
+  const s = STORY[dlgState.planet?.name];
+  if (!s) return closeDialogue();
+  dlgState.idx++;
+  if (dlgState.idx >= s.lines.length) return closeDialogue();
+  dlgText.textContent = s.lines[dlgState.idx];
+}
+function closeDialogue() {
+  dlgState.open = false;
+  dlgEl.style.display = 'none';
+}
+dlgEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); advanceDialogue(); });
+// 点击居民 → 开始对话（球面上、离得近才有效）
+const raycaster = new THREE.Raycaster();
+const pointerV = new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (dlgState.open || state.mode !== 'planet') return;
+  const inh = state.planet?.group.userData.inhabitant;
+  if (!inh) return;
+  const wp = new THREE.Vector3();
+  inh.getWorldPosition(wp);
+  if (player.position.distanceTo(wp) > 6) return;
+  pointerV.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointerV, camera);
+  if (raycaster.intersectObject(inh, true).length) openDialogue(state.planet);
+});
 
 // 投进井里的话（光点飞行中）
 const MOTES = [];
@@ -746,6 +826,10 @@ const state = {
 const keys = {};
 addEventListener('keydown', e => {
   keys[e.code] = true;
+  if (dlgState.open) {
+    if (e.code === 'Space' || e.code === 'KeyE' || e.code === 'Enter') advanceDialogue();
+    return;
+  }
   if (e.code === 'Space' && state.mode === 'walk') launch();
   else if (e.code === 'Space' && state.mode === 'planet') planetLaunch();
   else if (e.code === 'KeyE' && state.mode === 'planet') planetInteract();
@@ -847,9 +931,9 @@ function tick() {
     // ---- 球面行走（小星球引力：脚下即大地） ----
     const P = state.planet;
     const rad = state.pRadial, h = state.pHeading;
-    const turn = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0);
+    const turn = dlgState.open ? 0 : (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0);
     if (turn) h.applyAxisAngle(rad, turn * 2.2 * dt).normalize();
-    const fwdIn = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0);
+    const fwdIn = dlgState.open ? 0 : (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0);
     if (fwdIn) {
       const axis = new THREE.Vector3().crossVectors(rad, h).normalize();
       const ang = fwdIn * (CFG.playerSpeed * dt) / P.r;
