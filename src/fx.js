@@ -42,25 +42,50 @@ export function addOutline(root, thickness = 1.03) {
   }
 }
 
-// 云片贴图：柔边径向渐变（canvas 生成，零外链）
-export function cloudTexture() {
+// 云片贴图：多瓣簇 + 平底 + 细碎噪声（canvas 生成，零外链）——积云的体积感
+export function cloudTexture(seed = 7) {
   const c = document.createElement('canvas');
-  c.width = c.height = 256;
+  c.width = c.height = 512;
   const ctx = c.getContext('2d');
-  const g = ctx.createRadialGradient(128, 132, 20, 128, 132, 126);
-  g.addColorStop(0, 'rgba(255,255,255,0.95)');
-  g.addColorStop(0.45, 'rgba(238,242,248,0.55)');
-  g.addColorStop(1, 'rgba(230,236,244,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 256, 256);
-  // 顶部再叠两坨小球，轮廓不至于太圆
-  for (const [x, y, r] of [[86, 96, 52], [176, 90, 44]]) {
-    const g2 = ctx.createRadialGradient(x, y, 6, x, y, r);
-    g2.addColorStop(0, 'rgba(255,255,255,0.75)');
-    g2.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g2;
-    ctx.fillRect(0, 0, 256, 256);
+  let s = seed;
+  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  // 主体：一串沿水平带分布的软瓣，上缘隆起、下缘压平
+  const lobes = [];
+  for (let i = 0; i < 26; i++) {
+    const x = 70 + rnd() * 372;
+    const yBase = 300;
+    const r = 34 + rnd() * 78;
+    const y = yBase - r * (0.35 + rnd() * 0.55);       // 大瓣顶得更高
+    lobes.push([x, y, r]);
   }
+  for (const [x, y, r] of lobes) {
+    const g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.85)');
+    g.addColorStop(0.55, 'rgba(240,244,250,0.42)');
+    g.addColorStop(1, 'rgba(235,240,248,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 512, 512);
+  }
+  // 细碎子瓣：轮廓破圆
+  for (let i = 0; i < 40; i++) {
+    const [px, py, pr] = lobes[(rnd() * lobes.length) | 0];
+    const a = rnd() * Math.PI * 2;
+    const x = px + Math.cos(a) * pr * 0.75, y = py + Math.sin(a) * pr * 0.55;
+    const r = pr * (0.16 + rnd() * 0.2);
+    const g = ctx.createRadialGradient(x, y, 1, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.5)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 512, 512);
+  }
+  // 底部裁平（积云平底）
+  const fade = ctx.createLinearGradient(0, 296, 0, 400);
+  fade.addColorStop(0, 'rgba(0,0,0,0)');
+  fade.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 296, 512, 216);
+  ctx.globalCompositeOperation = 'source-over';
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -72,9 +97,9 @@ export function makeComposer(renderer, scene, camera) {
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight),
-    0.7,    // strength
-    0.65,   // radius
-    0.6     // threshold：只有亮部起光
+    0.5,    // strength
+    0.6,    // radius
+    0.78    // threshold：压高，云不再洗白，只留灯与信标发光
   );
   composer.addPass(bloom);
   return composer;

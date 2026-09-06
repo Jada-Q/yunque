@@ -85,7 +85,8 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
   scene.add(stars);
 }
 
-// ---------- 云海（灰盒：三层大面片 + 近处云团） ----------
+const cloudSprites = []; // 供缓漂动画
+// ---------- 云海（分层面片 + 积云贴图 billboard） ----------
 {
   // 云海底盘：不受雾、不受光的自亮面（月照云海的底色）
   const layer = (y, color, op, size) => {
@@ -99,6 +100,7 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
   };
   layer(CFG.cloudY - 2, 0x8fa3c0, 1.0, 1300);
   layer(CFG.cloudY - 8, 0x64789a, 1.0, 1300);
+  layer(CFG.cloudY + 5, 0xc4d0e2, 0.14, 1300); // 云面上的薄霭（廉价体积感）
   // 云片 billboard：柔边贴图，近团 + 全向远脊两波
   const tex = cloudTexture();
   const nearMats = Array.from({ length: 6 }, (_, i) => new THREE.SpriteMaterial({
@@ -113,6 +115,9 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
     const sp = new THREE.Sprite(mats[(Math.random() * mats.length) | 0]);
     sp.position.set(x, CFG.cloudY + 2.5 + yJit, z);
     sp.scale.set(s, s * 0.42, 1);
+    sp.userData.baseX = x;
+    sp.userData.ph = Math.random() * 6;
+    cloudSprites.push(sp);
     scene.add(sp);
   };
   for (let i = 0; i < 70; i++) {
@@ -360,6 +365,115 @@ function makeFlock() {
 }
 creatures.flocks = [makeFlock(), makeFlock()];
 
+// ---------- 小星球（星球间探险：每颗一个小世界，球面行走） ----------
+const PLANETS = [];
+// 把物件立在球面 (lat, lon)：位置贴面、Y 轴对准径向
+function onSurface(obj, r, lat, lon) {
+  const dir = new THREE.Vector3(
+    Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon));
+  obj.position.copy(dir.clone().multiplyScalar(r));
+  obj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  return obj;
+}
+function makePlanet(def) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(def.r, 26, 20), mat(def.color));
+  body.castShadow = body.receiveShadow = true;
+  g.add(body);
+  def.build(g, def.r);
+  g.position.set(def.x, def.y, def.z);
+  scene.add(g);
+  const p = { ...def, group: g, center: new THREE.Vector3(def.x, def.y, def.z) };
+  PLANETS.push(p);
+  return p;
+}
+// 灯星：居民是个点灯的老习惯——黄昏一到，一盏一盏全点上
+makePlanet({
+  name: '灯星', x: -72, y: -4, z: -98, r: 11, color: 0x4a4f5e,
+  build(g, r) {
+    for (let i = 0; i < 9; i++) {
+      const lamp = new THREE.Group();
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.5, 6), mat(0x3d3830));
+      post.position.y = 0.75;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffc98a }));
+      head.position.y = 1.6;
+      lamp.add(post, head);
+      onSurface(lamp, r, (Math.random() - 0.3) * 1.6, Math.random() * Math.PI * 2);
+      g.add(lamp);
+    }
+    // 顶极大灯
+    const big = new THREE.Group();
+    const bp = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 2.6, 8), mat(0x3d3830));
+    bp.position.y = 1.3;
+    const bh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 10), new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
+    bh.position.y = 2.9;
+    big.add(bp, bh);
+    const bl = new THREE.PointLight(0xffb066, 30, 26, 1.8);
+    bl.position.y = 3;
+    big.add(bl);
+    onSurface(big, r, Math.PI / 2, 0);
+    g.add(big);
+  },
+});
+// 树星：只长一种歪脖子树，落叶永远落不到地上（都飘去云海了）
+makePlanet({
+  name: '树星', x: -165, y: 3, z: -58, r: 13, color: 0x46543f,
+  build(g, r) {
+    for (let i = 0; i < 5; i++) {
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 2.6, 7), mat(0x5c4327));
+      trunk.position.y = 1.3;
+      trunk.rotation.z = (Math.random() - 0.5) * 0.5;
+      const crown1 = new THREE.Mesh(new THREE.SphereGeometry(1.1, 9, 7), mat(0x5a7050));
+      crown1.position.set(trunk.rotation.z * -2.2, 2.9, 0);
+      crown1.scale.set(1.25, 0.6, 1.25);
+      const crown2 = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), mat(0x6a8058));
+      crown2.position.set(trunk.rotation.z * -2.2 + 0.5, 3.5, 0.3);
+      crown2.scale.set(1.1, 0.55, 1.1);
+      tree.add(trunk, crown1, crown2);
+      const s = 0.7 + Math.random() * 0.7;
+      tree.scale.setScalar(s);
+      onSurface(tree, r, (Math.random() - 0.35) * 1.8, Math.random() * Math.PI * 2);
+      g.add(tree);
+    }
+    for (let i = 0; i < 14; i++) {
+      const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 5), mat(0x53614a));
+      onSurface(tuft, r + 0.15, (Math.random() - 0.5) * 2.6, Math.random() * Math.PI * 2);
+      g.add(tuft);
+    }
+  },
+});
+// 泉星：整颗星只有一口井，水光是它唯一的话
+makePlanet({
+  name: '泉星', x: -52, y: -1, z: 118, r: 9, color: 0x3e4a58,
+  build(g, r) {
+    const well = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.8, 10, 1, true), mat(0x6b6455));
+    ring.position.y = 0.4;
+    const water = new THREE.Mesh(new THREE.CircleGeometry(0.9, 12), new THREE.MeshBasicMaterial({ color: 0x8fd8e8 }));
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = 0.55;
+    for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 6), mat(0x5c4327));
+      post.position.set(sx * 0.95, 1.2, 0);
+      well.add(post);
+    }
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(1.5, 0.7, 4), mat(0x5c4327));
+    roof.position.y = 2.25;
+    roof.rotation.y = Math.PI / 4;
+    const wl = new THREE.PointLight(0x8fd8e8, 14, 16, 1.8);
+    wl.position.y = 1;
+    well.add(ring, water, roof, wl);
+    onSurface(well, r, Math.PI / 2, 0);
+    g.add(well);
+    for (let i = 0; i < 10; i++) {
+      const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22 + Math.random() * 0.25, 0), mat(0x55606e));
+      onSurface(stone, r + 0.05, (Math.random() - 0.5) * 2.4, Math.random() * Math.PI * 2);
+      g.add(stone);
+    }
+  },
+});
+
 // ---------- 远处浮塔群（Blender 三型实例化；基座没入云海） ----------
 {
   const TOWER_SPOTS = [ // [型, x, z, 缩放, 朝向]
@@ -457,8 +571,12 @@ new GLTFLoader().load('/models/wing.glb', (g) => {
 // ---------- 状态与输入 ----------
 const G = CFG.glide;
 const state = {
-  mode: 'walk',            // walk | glide
+  mode: 'walk',            // walk | glide | planet
   pad: PADS[0],
+  planet: null,
+  planetGrace: null,
+  pRadial: new THREE.Vector3(0, 1, 0),
+  pHeading: new THREE.Vector3(0, 0, 1),
   yaw: Math.PI,            // 面向 -z? 起飞方向由行走朝向决定
   pitch: 0,
   speed: 0,
@@ -468,6 +586,7 @@ const keys = {};
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space' && state.mode === 'walk') launch();
+  else if (e.code === 'Space' && state.mode === 'planet') planetLaunch();
 });
 addEventListener('keyup', e => keys[e.code] = false);
 
@@ -492,10 +611,27 @@ function respawn() {
   toast('坠入云海');
   state.mode = 'walk';
   state.pad = PADS[0];
+  state.planet = null;
+  state.planetGrace = null;
   player.position.set(2, 0, 2);
   player.rotation.set(0, Math.PI, 0);
+  player.quaternion.setFromEuler(player.rotation);
+  camera.up.set(0, 1, 0);
   camera.fov = CFG.cam.fov;
   camera.updateProjectionMatrix();
+}
+
+function planetLaunch() {
+  const h = state.pHeading, rad = state.pRadial;
+  state.mode = 'glide';
+  state.yaw = Math.atan2(h.x, h.z);
+  state.pitch = 0.18;
+  state.speed = G.launchSpeed;
+  state.launchGrace = null;
+  state.planetGrace = state.planet;   // 飞出本星引力边界前不再被它捕获
+  player.position.addScaledVector(rad, 1.6);
+  state.planet = null;
+  camera.up.set(0, 1, 0);
 }
 
 // ---------- 主循环 ----------
@@ -544,6 +680,32 @@ function tick() {
       camera.fov += (CFG.cam.fov - camera.fov) * k;
       camera.updateProjectionMatrix();
     }
+  } else if (state.mode === 'planet') {
+    // ---- 球面行走（小星球引力：脚下即大地） ----
+    const P = state.planet;
+    const rad = state.pRadial, h = state.pHeading;
+    const turn = (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0);
+    if (turn) h.applyAxisAngle(rad, turn * 2.2 * dt).normalize();
+    const fwdIn = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0);
+    if (fwdIn) {
+      const axis = new THREE.Vector3().crossVectors(rad, h).normalize();
+      const ang = fwdIn * (CFG.playerSpeed * dt) / P.r;
+      rad.applyAxisAngle(axis, ang).normalize();
+      h.applyAxisAngle(axis, ang).normalize();     // 平行输运，保持切向
+    }
+    player.position.copy(P.center).addScaledVector(rad, P.r);
+    const xA = new THREE.Vector3().crossVectors(rad, h).normalize();
+    player.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, rad, h));
+    if (wing) wing.visible = false;
+    // 球面相机：沿径向抬起、退到身后，up=径向
+    const camT = player.position.clone().addScaledVector(rad, 4.2).addScaledVector(h, -7.5);
+    camera.position.lerp(camT, k);
+    camera.up.copy(rad);
+    camera.lookAt(player.position.clone().addScaledVector(rad, 1.2).addScaledVector(h, 2.5));
+    if (camera.fov !== CFG.cam.fov) {
+      camera.fov += (CFG.cam.fov - camera.fov) * k;
+      camera.updateProjectionMatrix();
+    }
   } else {
     // ---- 滑翔 ----
     state.yaw += ((keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0)) * G.yawRate * dt;
@@ -575,6 +737,29 @@ function tick() {
     const turnIn = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0);
     player.rotation.z += ((-turnIn * 0.5) - player.rotation.z) * (1 - Math.exp(-6 * dt));
 
+    // 星球捕获：靠近即降落（引力井）
+    for (const P of PLANETS) {
+      if (P === state.planetGrace) {
+        if (player.position.distanceTo(P.center) > P.r + 6) state.planetGrace = null;
+        continue;
+      }
+      const dP = player.position.distanceTo(P.center);
+      if (dP < P.r + 1.4) {
+        state.mode = 'planet';
+        state.planet = P;
+        state.pRadial.copy(player.position).sub(P.center).normalize();
+        fwd.set(Math.sin(state.yaw), 0, Math.cos(state.yaw));
+        state.pHeading.copy(fwd).addScaledVector(state.pRadial, -fwd.dot(state.pRadial));
+        if (state.pHeading.lengthSq() < 0.05) state.pHeading.set(1, 0, 0).addScaledVector(state.pRadial, -state.pRadial.x);
+        state.pHeading.normalize();
+        player.rotation.z = 0;
+        if (wing) wing.visible = false;
+        toast(P.name, 2200);
+        break;
+      }
+    }
+    if (state.mode !== 'glide') { composer.render(); requestAnimationFrame(tick); return; }
+
     // 出发台豁免：飞出其水平边界（或爬升超其上方 3m）后解除
     if (state.launchGrace) {
       const LP = state.launchGrace;
@@ -602,6 +787,7 @@ function tick() {
 
     // 追飞相机：拉在身后，速度越快视野越阔
     if (state.mode === 'glide') {
+      camera.up.set(0, 1, 0);
       const camTarget = player.position.clone().addScaledVector(fwd, -G.camDist);
       camTarget.y += G.camUp;
       camera.position.lerp(camTarget, 1 - Math.exp(-4 * dt));
@@ -621,6 +807,10 @@ function tick() {
 // 氛围层统一步进（tick 与 demo 帧步进共用）
 function ambientUpdate(dt) {
   elapsed += dt;
+  // 云缓漂
+  for (const sp of cloudSprites) {
+    sp.position.x = sp.userData.baseX + Math.sin(elapsed * 0.015 + sp.userData.ph) * 4;
+  }
   // --- 过路飞船巡航 ---
   for (const t of traffic) {
     if (t.wait > 0) { t.wait -= dt; continue; }
@@ -691,7 +881,7 @@ addEventListener('resize', () => {
 toonify(scene);
 addOutline(scene);
 
-window.__yunque = { player, camera, scene, renderer, composer, state, PADS, UPDRAFT, traffic, resetTraffic, creatures, spawnLev };
+window.__yunque = { player, camera, scene, renderer, composer, state, PADS, PLANETS, UPDRAFT, traffic, resetTraffic, creatures, spawnLev };
 // demo 帧步进钩子（__frozen=true 后由录制脚本逐帧驱动）
 window.__demo = {
   ambient: (dt) => ambientUpdate(dt),
