@@ -387,37 +387,65 @@ function makePlanet(def) {
   PLANETS.push(p);
   return p;
 }
-// 灯星：居民是个点灯的老习惯——黄昏一到，一盏一盏全点上
+// 简易小人：给星球居民用（坐/跪两种姿态）
+function makeFigure(clothHex, pose) {
+  const f = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.72, 9), mat(clothHex));
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 9, 7), mat(0xd9c4a8));
+  if (pose === 'sit') {
+    body.position.y = 0.52; body.scale.y = 0.85;
+    head.position.set(0, 1.0, 0.06);
+    head.rotation.z = 0.2;                       // 微微侧头——倾听的姿态
+    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.16, 0.5), mat(clothHex));
+    legs.position.set(0, 0.16, 0.3);
+    f.add(legs);
+    const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.3, 8), mat(0x55606e));
+    stone.position.y = 0.02;
+    f.add(stone);
+  } else { // kneel
+    body.position.y = 0.42; body.rotation.x = 0.5; body.scale.y = 0.8;
+    head.position.set(0, 0.86, 0.3);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6), mat(clothHex));
+    arm.position.set(0.16, 0.5, 0.5); arm.rotation.x = 1.2;
+    f.add(arm);
+    const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.24), mat(0xf0ead8));
+    cloth.position.set(0.16, 0.03, 0.72);
+    f.add(cloth);
+  }
+  f.add(body, head);
+  return f;
+}
+
+// 拭星：她永远在擦她的星球。一半已经发亮，一半蒙着薄灰。擦不完，也不着急。
 makePlanet({
-  name: '灯星', x: -72, y: -4, z: -98, r: 11, color: 0x4a4f5e,
+  name: '拭星', poem: '擦不完，也不着急。', x: -72, y: -4, z: -98, r: 11, color: 0x4a453e,
   build(g, r) {
-    for (let i = 0; i < 9; i++) {
-      const lamp = new THREE.Group();
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.5, 6), mat(0x3d3830));
-      post.position.y = 0.75;
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffc98a }));
-      head.position.y = 1.6;
-      lamp.add(post, head);
-      onSurface(lamp, r, (Math.random() - 0.3) * 1.6, Math.random() * Math.PI * 2);
-      g.add(lamp);
+    // 已擦亮的半球（可随擦拭缓缓扩張）
+    const bright = new THREE.Mesh(
+      new THREE.SphereGeometry(r + 0.04, 26, 20, 0, Math.PI),
+      mat(0x8d867a, { emissive: 0x1c2026, emissiveIntensity: 0.6 })
+    );
+    const wiped = Number(localStorage.getItem('yq-wipes') || 0);
+    bright.rotation.y = Math.min(1.2, wiped * 0.025);   // 历史擦拭让亮界继续推进
+    g.add(bright);
+    g.userData.bright = bright;
+    // 擦拭者跪在明暗交界线上（经度 0 的赤道处）
+    const her = makeFigure(0x6e5a4a, 'kneel');
+    onSurface(her, r, 0, 0.06);
+    g.add(her);
+    // 几块她擦过的地方泛着光斑
+    for (let i = 0; i < 6; i++) {
+      const patch = new THREE.Mesh(new THREE.CircleGeometry(0.5 + Math.random() * 0.5, 10),
+        mat(0x9a938a, { emissive: 0x2a2f38, emissiveIntensity: 0.8 }));
+      onSurface(patch, r + 0.06, (Math.random() - 0.5) * 1.8, Math.PI * 0.6 + Math.random() * 1.6);
+      patch.rotateX(-Math.PI / 2);
+      g.add(patch);
     }
-    // 顶极大灯
-    const big = new THREE.Group();
-    const bp = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 2.6, 8), mat(0x3d3830));
-    bp.position.y = 1.3;
-    const bh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 10), new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
-    bh.position.y = 2.9;
-    big.add(bp, bh);
-    const bl = new THREE.PointLight(0xffb066, 30, 26, 1.8);
-    bl.position.y = 3;
-    big.add(bl);
-    onSurface(big, r, Math.PI / 2, 0);
-    g.add(big);
   },
 });
-// 树星：只长一种歪脖子树，落叶永远落不到地上（都飘去云海了）
+// 树星：无人荒星——没有居民，树自己住
 makePlanet({
-  name: '树星', x: -165, y: 3, z: -58, r: 13, color: 0x46543f,
+  name: '树星', poem: '没有居民，树自己住。', x: -165, y: 3, z: -58, r: 13, color: 0x46543f,
   build(g, r) {
     for (let i = 0; i < 5; i++) {
       const tree = new THREE.Group();
@@ -443,10 +471,14 @@ makePlanet({
     }
   },
 });
-// 泉星：整颗星只有一口井，水光是它唯一的话
+// 井星：他坐在井边，一直在听。你可以把一句没说出口的话投进去。
 makePlanet({
-  name: '泉星', x: -52, y: -1, z: 118, r: 9, color: 0x3e4a58,
+  name: '井星', poem: '他不说话，他都听见了。', x: -52, y: -1, z: 118, r: 9, color: 0x3e4a58,
   build(g, r) {
+    // 倾听者：坐在井旁，微微侧头
+    const listener = makeFigure(0x3a4763, 'sit');
+    onSurface(listener, r, Math.PI / 2 - 0.34, 0.4);
+    g.add(listener);
     const well = new THREE.Group();
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.8, 10, 1, true), mat(0x6b6455));
     ring.position.y = 0.4;
@@ -466,6 +498,16 @@ makePlanet({
     well.add(ring, water, roof, wl);
     onSurface(well, r, Math.PI / 2, 0);
     g.add(well);
+    // 井里已沉着的话让水更亮（跨会话累积）
+    const motes = Number(localStorage.getItem('yq-well-motes') || 0);
+    wl.intensity = 14 + Math.min(30, motes * 1.5);
+    water.material.color.offsetHSL(0, 0, Math.min(0.15, motes * 0.008));
+    g.userData.wellLight = wl;
+    g.userData.water = water;
+    g.userData.wellWorld = () => {
+      const v = new THREE.Vector3(0, r, 0);
+      return g.localToWorld(v);
+    };
     for (let i = 0; i < 10; i++) {
       const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22 + Math.random() * 0.25, 0), mat(0x55606e));
       onSurface(stone, r + 0.05, (Math.random() - 0.5) * 2.4, Math.random() * Math.PI * 2);
@@ -473,6 +515,88 @@ makePlanet({
     }
   },
 });
+
+// 海星：全世界都是夜晚，只有这里永远是上午十点。
+const FOAMS = [];
+makePlanet({
+  name: '海星', poem: '想念的地方，永远是晴天。', x: -128, y: 5, z: 162, r: 14, color: 0xf2e8cf,
+  sea: true, seaLatEdge: 0.62,
+  build(g, r) {
+    // 基球=白沙（MeshBasic 不吃夜光——永远晴天），赤道海带=蹭蹭蓝
+    g.children[0].material = new THREE.MeshBasicMaterial({ color: 0xf2e8cf });
+    g.children[0].userData.outline = true; // 白天的星球不描墨线
+    const sea = new THREE.Mesh(
+      new THREE.SphereGeometry(r + 0.14, 32, 22, 0, Math.PI * 2, 0.95, Math.PI - 1.9),
+      new THREE.MeshBasicMaterial({ color: 0x2fa8d8, transparent: true, opacity: 0.88 })
+    );
+    sea.userData.outline = true;
+    g.add(sea);
+    // 岸线浪花：两圈白沫在海陆交界呼吸
+    for (const th of [0.95, Math.PI - 0.95]) {
+      const foam = new THREE.Mesh(
+        new THREE.TorusGeometry((r + 0.16) * Math.sin(th), 0.09, 6, 48),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 })
+      );
+      foam.rotation.x = Math.PI / 2;
+      foam.position.y = (r + 0.16) * Math.cos(th);
+      foam.userData.outline = true;
+      foam.userData.ph = th;
+      g.add(foam);
+      FOAMS.push(foam);
+    }
+    // 这颗星自己的太阳
+    const sunGlow = new THREE.Mesh(new THREE.CircleGeometry(2.6, 20), new THREE.MeshBasicMaterial({ color: 0xfff3d0, fog: false }));
+    sunGlow.position.set(6, r + 16, -4);
+    sunGlow.userData.outline = true;
+    g.add(sunGlow);
+    const dayLight = new THREE.PointLight(0xfff2dd, 90, 70, 1.6);
+    dayLight.position.set(4, r + 14, -3);
+    g.add(dayLight);
+    // 几把遮阳伞级别的细节：两只海星、一串脚印石
+    for (let i = 0; i < 4; i++) {
+      const star5 = new THREE.Mesh(new THREE.CircleGeometry(0.28, 5), new THREE.MeshBasicMaterial({ color: 0xe88d5a }));
+      onSurface(star5, r + 0.03, 0.75 + Math.random() * 0.35, Math.random() * Math.PI * 2);
+      star5.rotateX(-Math.PI / 2);
+      g.add(star5);
+    }
+  },
+});
+// 玩家踏浪的脚边浪圈（共享一只，进水即现）
+const wadeFoam = new THREE.Mesh(
+  new THREE.TorusGeometry(0.55, 0.05, 6, 20),
+  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 })
+);
+wadeFoam.visible = false;
+scene.add(wadeFoam);
+
+// 投进井里的话（光点飞行中）
+const MOTES = [];
+let hintShown = {};
+function planetInteract() {
+  const P = state.planet;
+  if (!P) return;
+  if (P.name === '井星') {
+    const wellPos = P.group.userData.wellWorld();
+    if (player.position.distanceTo(wellPos) < 5) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), new THREE.MeshBasicMaterial({ color: 0xbfe8f2 }));
+      m.position.copy(player.position).addScaledVector(state.pRadial, 1.2);
+      scene.add(m);
+      MOTES.push({ mesh: m, from: m.position.clone(), to: wellPos.clone(), t: 0, planet: P });
+      toast('一句话，沉进井里', 2000);
+    }
+  } else if (P.name === '拭星') {
+    const n = Number(localStorage.getItem('yq-wipes') || 0) + 1;
+    localStorage.setItem('yq-wipes', String(n));
+    P.group.userData.bright.rotation.y = Math.min(1.2, n * 0.025);
+    const patch = new THREE.Mesh(new THREE.CircleGeometry(0.55, 10),
+      mat(0x9a938a, { emissive: 0x2a2f38, emissiveIntensity: 0.8 }));
+    const local = P.group.worldToLocal(player.position.clone()).normalize();
+    patch.position.copy(local.clone().multiplyScalar(P.r + 0.06));
+    patch.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), local);
+    P.group.add(patch);
+    toast('亮了一块', 1400);
+  }
+}
 
 // ---------- 远处浮塔群（Blender 三型实例化；基座没入云海） ----------
 {
@@ -587,6 +711,7 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space' && state.mode === 'walk') launch();
   else if (e.code === 'Space' && state.mode === 'planet') planetLaunch();
+  else if (e.code === 'KeyE' && state.mode === 'planet') planetInteract();
 });
 addEventListener('keyup', e => keys[e.code] = false);
 
@@ -631,6 +756,7 @@ function planetLaunch() {
   state.planetGrace = state.planet;   // 飞出本星引力边界前不再被它捕获
   player.position.addScaledVector(rad, 1.6);
   state.planet = null;
+  wadeFoam.visible = false;
   camera.up.set(0, 1, 0);
 }
 
@@ -697,6 +823,19 @@ function tick() {
     const xA = new THREE.Vector3().crossVectors(rad, h).normalize();
     player.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, rad, h));
     if (wing) wing.visible = false;
+    // 海星踏浪：走进海带即起浪圈
+    if (P.sea) {
+      const lat = Math.asin(THREE.MathUtils.clamp(rad.y, -1, 1));
+      const inSea = Math.abs(lat) < (Math.PI / 2 - 0.95);
+      wadeFoam.visible = inSea;
+      if (inSea) {
+        wadeFoam.position.copy(player.position).addScaledVector(rad, 0.08);
+        wadeFoam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), rad);
+        const ws = 1 + Math.sin(elapsed * 5) * 0.15;
+        wadeFoam.scale.set(ws, ws, 1);
+        if (!hintShown.wade) { hintShown.wade = true; toast('踏浪', 1800); }
+      }
+    } else wadeFoam.visible = false;
     // 球面相机：沿径向抬起、退到身后，up=径向
     const camT = player.position.clone().addScaledVector(rad, 4.2).addScaledVector(h, -7.5);
     camera.position.lerp(camT, k);
@@ -754,7 +893,12 @@ function tick() {
         state.pHeading.normalize();
         player.rotation.z = 0;
         if (wing) wing.visible = false;
-        toast(P.name, 2200);
+        toast(P.poem || P.name, 3000);
+        if (!hintShown[P.name]) {
+          hintShown[P.name] = true;
+          if (P.name === '井星') setTimeout(() => toast('E · 把一句没说出口的话投进井里', 2600), 3300);
+          if (P.name === '拭星') setTimeout(() => toast('E · 帮她擦一块', 2200), 3300);
+        }
         break;
       }
     }
@@ -810,6 +954,29 @@ function ambientUpdate(dt) {
   // 云缓漂
   for (const sp of cloudSprites) {
     sp.position.x = sp.userData.baseX + Math.sin(elapsed * 0.015 + sp.userData.ph) * 4;
+  }
+  // 沉井的话（光点弧线飞向井口）
+  for (let i = MOTES.length - 1; i >= 0; i--) {
+    const M = MOTES[i];
+    M.t += dt / 1.4;
+    const u = Math.min(1, M.t);
+    M.mesh.position.lerpVectors(M.from, M.to, u);
+    M.mesh.position.addScaledVector(state.pRadial, Math.sin(u * Math.PI) * 1.6);
+    if (u >= 1) {
+      scene.remove(M.mesh);
+      MOTES.splice(i, 1);
+      const n = Number(localStorage.getItem('yq-well-motes') || 0) + 1;
+      localStorage.setItem('yq-well-motes', String(n));
+      const ud = M.planet.group.userData;
+      ud.wellLight.intensity = 14 + Math.min(30, n * 1.5);
+      ud.water.material.color.offsetHSL(0, 0, 0.006);
+    }
+  }
+  // 海星岸浪呼吸
+  for (const f of FOAMS) {
+    const s = 1 + Math.sin(elapsed * 0.9 + f.userData.ph) * 0.012;
+    f.scale.set(s, s, 1);
+    f.material.opacity = 0.5 + Math.sin(elapsed * 0.9 + f.userData.ph) * 0.25;
   }
   // --- 过路飞船巡航 ---
   for (const t of traffic) {
