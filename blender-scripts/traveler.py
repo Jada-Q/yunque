@@ -106,20 +106,12 @@ tail2.rotation_euler = (math.radians(35), 0, math.radians(10))
 # 大头（占身高近半——可爱比例的关键）
 head = add(bpy.ops.mesh.primitive_uv_sphere_add, m_skin, segments=14, ring_count=11, radius=0.34, location=(0, 0, 1.18))
 # 头发：罩住后脑的半球 + 额前一撮呆毛
-hair = add(bpy.ops.mesh.primitive_uv_sphere_add, m_hair, segments=12, ring_count=8, radius=0.355, location=(0, 0.03, 1.23))
-hair.scale = (1, 1, 0.82)
+hair = add(bpy.ops.mesh.primitive_uv_sphere_add, m_hair, segments=12, ring_count=8, radius=0.375, location=(0, 0.03, 1.25))
+hair.scale = (1, 1, 0.86)  # 完整罩住头顶,不再露头皮
 fringe = add(bpy.ops.mesh.primitive_uv_sphere_add, m_hair, segments=10, ring_count=6, radius=0.16, location=(0, -0.27, 1.37))
 fringe.scale = (1.9, 0.62, 0.62)
 tuft = add(bpy.ops.mesh.primitive_cone_add, m_hair, vertices=6, radius1=0.05, radius2=0, depth=0.16, location=(0.02, 0.02, 1.58))
 tuft.rotation_euler = (math.radians(-15), 0, math.radians(12))
-# 护目镜推在发际上（信使的身份记号）
-band = add(bpy.ops.mesh.primitive_torus_add, m_dark, major_radius=0.315, minor_radius=0.024, location=(0, 0.02, 1.45))
-band.rotation_euler = (math.radians(-12), 0, 0)  # 前高后低:后段埋进头发,不再像光圈
-for sx in (-0.11, 0.11):
-    g = add(bpy.ops.mesh.primitive_cylinder_add, m_brass, vertices=10, radius=0.06, depth=0.045, location=(sx, -0.245, 1.50))
-    g.rotation_euler = (math.radians(64), 0, 0)
-    gl = add(bpy.ops.mesh.primitive_cylinder_add, m_dark, vertices=10, radius=0.042, depth=0.05, location=(sx, -0.253, 1.503))
-    gl.rotation_euler = (math.radians(64), 0, 0)
 # 点眼睛×2（有了眼睛才是"人"）
 for sx in (-0.115, 0.115):
     add(bpy.ops.mesh.primitive_uv_sphere_add, m_eye, segments=7, ring_count=5, radius=0.032, location=(sx, -0.315, 1.16))
