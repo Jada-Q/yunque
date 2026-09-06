@@ -129,11 +129,13 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
 {
   const wallMat = mat(0x5c4433);
   const darkMat = mat(0x3d3028);
-  // 主体板块
+  // 主体板块（船坞湾禁区：|z|<26 的墙面整体后退，近景交给天舟与栈桥）
+  const dockRecess = (z) => (Math.abs(z) < 26 ? 11 : 0);
   for (let i = 0; i < 34; i++) {
     const w = 6 + Math.random() * 14, h = 10 + Math.random() * 26, d = 8 + Math.random() * 22;
+    const bz = -110 + Math.random() * 220;
     const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), Math.random() < 0.5 ? wallMat : darkMat);
-    b.position.set(12 + Math.random() * 14, -70 + Math.random() * 160, -110 + Math.random() * 220);
+    b.position.set(12 + dockRecess(bz) + Math.random() * 14, -70 + Math.random() * 160, bz);
     b.castShadow = true;
     scene.add(b);
   }
@@ -146,8 +148,9 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
   // 亮窗（暖橙小方块，巨构的生命迹象）
   const winMat = new THREE.MeshBasicMaterial({ color: 0xffb066 });
   for (let i = 0; i < 130; i++) {
+    const wz = -100 + Math.random() * 200;
     const win = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.1), winMat);
-    win.position.set(9.6 + Math.random() * 3, -50 + Math.random() * 110, -100 + Math.random() * 200);
+    win.position.set(9.6 + (Math.abs(wz) < 26 ? 11 : 0) + Math.random() * 3, -50 + Math.random() * 110, wz);
     win.rotation.y = Math.PI / 2;
     scene.add(win);
   }
@@ -155,15 +158,17 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
   const gMat = mat(0x4a3a2c), gMat2 = mat(0x32404e);
   for (let i = 0; i < 14; i++) { // 横向管线
     const len = 30 + Math.random() * 110;
+    const pz = -60 + Math.random() * 120;
     const p = new THREE.Mesh(new THREE.CylinderGeometry(0.25 + Math.random() * 0.4, 0.25 + Math.random() * 0.4, len, 8), Math.random() < 0.5 ? gMat : gMat2);
     p.rotation.x = Math.PI / 2;
-    p.position.set(9 + Math.random() * 6, -55 + Math.random() * 120, -60 + Math.random() * 120);
+    p.position.set(9 + (Math.abs(pz) < 26 ? 11 : 0) + Math.random() * 6, -55 + Math.random() * 120, pz);
     scene.add(p);
   }
   for (let i = 0; i < 60; i++) { // 小箱簇
     const s = 0.8 + Math.random() * 2.4;
+    const bz = -95 + Math.random() * 190;
     const b = new THREE.Mesh(new THREE.BoxGeometry(s, s * (0.6 + Math.random()), s), Math.random() < 0.6 ? gMat : gMat2);
-    b.position.set(8.6 + Math.random() * 4, -40 + Math.random() * 95, -95 + Math.random() * 190);
+    b.position.set(8.6 + (Math.abs(bz) < 26 ? 11 : 0) + Math.random() * 4, -40 + Math.random() * 95, bz);
     scene.add(b);
   }
   for (let i = 0; i < 10; i++) { // 天线 + 红顶灯
@@ -191,37 +196,30 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
 
 // ---------- 悬挑平台（玩家站的地方） ----------
 {
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(16, 0.8, 17), mat(0x7a5a40));
-  deck.position.set(0.5, -0.4, 0);
-  deck.receiveShadow = true;
-  scene.add(deck);
-  // 斜撑
-  for (const dz of [-6, 0, 6]) {
-    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 14), mat(0x4a3a2c));
-    strut.position.set(3, -4.5, dz);
-    strut.rotation.z = 0.62;
-    scene.add(strut);
-  }
-  // 栏杆
-  const railMat = mat(0x3d3028);
-  for (let x = -7; x <= 8; x += 1.5) {
-    for (const z of [-8, 8]) {
-      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6), railMat);
-      p.position.set(x, 0.55, z);
-      scene.add(p);
+  // 天舟：主平台即系泊的空中飞船（Blender 模型，甲板面 y=0；舷墙自带，替代栏杆）
+  new GLTFLoader().load('/models/skyship.glb', (g) => {
+    g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    toonify(g.scene);
+    addOutline(g.scene, 1.015);
+    scene.add(g.scene);
+  }, undefined, () => {
+    // 兜底：加载失败给一块素甲板，游戏仍可玩
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(22, 0.8, 18), mat(0x7a5a40));
+    deck.position.set(-1, -0.4, 0);
+    scene.add(deck);
+  });
+  // 栈桥：船艉接巨构
+  const gang = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.5, 2.4), mat(0x4a3a2c));
+  gang.position.set(14, -0.25, 0);
+  gang.receiveShadow = true;
+  scene.add(gang);
+  for (const gx of [11.5, 16.5]) {
+    for (const gz of [-1.1, 1.1]) {
+      const gp = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.9, 6), mat(0x3d3028));
+      gp.position.set(gx, 0.45, gz);
+      scene.add(gp);
     }
   }
-  for (let z = -8; z <= 8; z += 1.5) {
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6), railMat);
-    p.position.set(-7, 0.55, z);
-    scene.add(p);
-  }
-  const railTop = (w, x, z, ry) => {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.09, 0.09), railMat);
-    r.position.set(x, 1.1, z); r.rotation.y = ry;
-    scene.add(r);
-  };
-  railTop(15.5, 0.5, -8, 0); railTop(15.5, 0.5, 8, 0); railTop(16.5, -7, 0, Math.PI / 2);
   // 甲板杂件：木箱堆 + 灯柱（暖光）
   const crate = (x, z, s) => {
     const c = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), mat(0x6a5138));
@@ -265,7 +263,7 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
 
 // ---------- 落点塔（两座设计塔：A 低于起点顺滑可达，B 更高需借上升气流） ----------
 const PADS = [
-  { name: 'deck', x0: -7, x1: 8, z0: -8, z1: 8, y: 0 },
+  { name: 'deck', x0: -11.5, x1: 9.5, z0: -8.5, z1: 8.5, y: 0 },
   { name: 'towerA', x0: -94, x1: -76, z0: -39, z1: -21, y: -4 },
   { name: 'towerB', x0: -160, x1: -140, z0: 31, z1: 49, y: 7 },
 ];
