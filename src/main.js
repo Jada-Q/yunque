@@ -387,6 +387,19 @@ function makePlanet(def) {
   PLANETS.push(p);
   return p;
 }
+// 萤火：给星球加呼吸的光点
+const FLIES = [];
+function addFireflies(g, r, n, hex) {
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.8 });
+    const fly = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), m);
+    onSurface(fly, r + 0.5 + Math.random() * 1.3, (Math.random() - 0.4) * 2.2, Math.random() * Math.PI * 2);
+    fly.userData.outline = true;
+    g.add(fly);
+    FLIES.push({ m, ph: Math.random() * 6 });
+  }
+}
+
 // 简易小人：给星球居民用（坐/跪两种姿态）
 function makeFigure(clothHex, pose) {
   const f = new THREE.Group();
@@ -418,13 +431,25 @@ function makeFigure(clothHex, pose) {
 
 // 拭星：她永远在擦她的星球。一半已经发亮，一半蒙着薄灰。擦不完，也不着急。
 makePlanet({
-  name: '拭星', poem: '擦不完，也不着急。', x: -72, y: -4, z: -98, r: 11, color: 0x4a453e,
+  name: '拭星', poem: '擦不完，也不着急。', x: -72, y: -4, z: -98, r: 11, color: 0x6a6055,
   build(g, r) {
-    // 已擦亮的半球（可随擦拭缓缓扩張）
+    // 已擦亮的半球（可随擦拭缓缓扩張）——擦过的地方是真的亮
     const bright = new THREE.Mesh(
       new THREE.SphereGeometry(r + 0.04, 26, 20, 0, Math.PI),
-      mat(0x8d867a, { emissive: 0x1c2026, emissiveIntensity: 0.6 })
+      mat(0xcfc4ae, { emissive: 0x3a3628, emissiveIntensity: 0.7 })
     );
+    // 她干活的灯：一盏暖橙提灯立在交界线旁（这颗星的色彩身份）
+    const lamp = new THREE.Group();
+    const lp = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.3, 6), mat(0x3d3830));
+    lp.position.y = 0.65;
+    const lh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffc98a }));
+    lh.position.y = 1.42;
+    const ll = new THREE.PointLight(0xffb066, 26, 20, 1.7);
+    ll.position.y = 1.5;
+    lamp.add(lp, lh, ll);
+    onSurface(lamp, r, 0.12, -0.22);
+    g.add(lamp);
+    addFireflies(g, r, 5, 0xffd9a0);
     const wiped = Number(localStorage.getItem('yq-wipes') || 0);
     bright.rotation.y = Math.min(1.2, wiped * 0.025);   // 历史擦拭让亮界继续推进
     g.add(bright);
@@ -436,7 +461,7 @@ makePlanet({
     // 几块她擦过的地方泛着光斑
     for (let i = 0; i < 6; i++) {
       const patch = new THREE.Mesh(new THREE.CircleGeometry(0.5 + Math.random() * 0.5, 10),
-        mat(0x9a938a, { emissive: 0x2a2f38, emissiveIntensity: 0.8 }));
+        mat(0xd9cfb8, { emissive: 0x4a4436, emissiveIntensity: 0.9 }));
       onSurface(patch, r + 0.06, (Math.random() - 0.5) * 1.8, Math.PI * 0.6 + Math.random() * 1.6);
       patch.rotateX(-Math.PI / 2);
       g.add(patch);
@@ -445,40 +470,52 @@ makePlanet({
 });
 // 树星：无人荒星——没有居民，树自己住
 makePlanet({
-  name: '树星', poem: '没有居民，树自己住。', x: -165, y: 3, z: -58, r: 13, color: 0x46543f,
+  name: '树星', poem: '没有居民，树自己住。', x: -165, y: 3, z: -58, r: 13, color: 0x577a4a,
   build(g, r) {
-    for (let i = 0; i < 5; i++) {
+    // 满星的绿：大小林木铺开整个球面
+    for (let i = 0; i < 14; i++) {
       const tree = new THREE.Group();
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 2.6, 7), mat(0x5c4327));
       trunk.position.y = 1.3;
       trunk.rotation.z = (Math.random() - 0.5) * 0.5;
-      const crown1 = new THREE.Mesh(new THREE.SphereGeometry(1.1, 9, 7), mat(0x5a7050));
+      const crownHex = [0x6fa060, 0x84b072, 0x5f9455][(Math.random() * 3) | 0];
+      const crown1 = new THREE.Mesh(new THREE.SphereGeometry(1.1, 9, 7), mat(crownHex));
       crown1.position.set(trunk.rotation.z * -2.2, 2.9, 0);
       crown1.scale.set(1.25, 0.6, 1.25);
-      const crown2 = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), mat(0x6a8058));
+      const crown2 = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), mat(0x8fbf7a));
       crown2.position.set(trunk.rotation.z * -2.2 + 0.5, 3.5, 0.3);
       crown2.scale.set(1.1, 0.55, 1.1);
       tree.add(trunk, crown1, crown2);
-      const s = 0.7 + Math.random() * 0.7;
+      const s = 0.55 + Math.random() * 0.85;
       tree.scale.setScalar(s);
-      onSurface(tree, r, (Math.random() - 0.35) * 1.8, Math.random() * Math.PI * 2);
+      onSurface(tree, r, (Math.random() - 0.5) * 2.6, Math.random() * Math.PI * 2);
       g.add(tree);
     }
-    for (let i = 0; i < 14; i++) {
-      const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 5), mat(0x53614a));
-      onSurface(tuft, r + 0.15, (Math.random() - 0.5) * 2.6, Math.random() * Math.PI * 2);
+    for (let i = 0; i < 30; i++) {
+      const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.55, 5), mat(0x6fa060));
+      onSurface(tuft, r + 0.15, (Math.random() - 0.5) * 2.8, Math.random() * Math.PI * 2);
       g.add(tuft);
     }
+    // 林间月色：淡绿的顶光 + 萤绿
+    const gl = new THREE.PointLight(0xbfe8c0, 20, 30, 1.8);
+    gl.position.set(0, r + 6, 0);
+    g.add(gl);
+    addFireflies(g, r, 8, 0xc8f0a8);
   },
 });
 // 井星：他坐在井边，一直在听。你可以把一句没说出口的话投进去。
 makePlanet({
-  name: '井星', poem: '他不说话，他都听见了。', x: -52, y: -1, z: 118, r: 9, color: 0x3e4a58,
+  name: '井星', poem: '他不说话，他都听见了。', x: -52, y: -1, z: 118, r: 9, color: 0x5e7a8a,
   build(g, r) {
     // 倾听者：坐在井旁，微微侧头
     const listener = makeFigure(0x3a4763, 'sit');
     onSurface(listener, r, Math.PI / 2 - 0.34, 0.4);
     g.add(listener);
+    // 月光青的星：淡青顶光 + 沉过的话化成的萤光
+    const ml = new THREE.PointLight(0x9fd8e8, 18, 26, 1.8);
+    ml.position.set(0, r + 7, 0);
+    g.add(ml);
+    addFireflies(g, r, 7, 0xaef0ff);
     const well = new THREE.Group();
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.8, 10, 1, true), mat(0x6b6455));
     ring.position.y = 0.4;
@@ -972,6 +1009,8 @@ function ambientUpdate(dt) {
       ud.water.material.color.offsetHSL(0, 0, 0.006);
     }
   }
+  // 萤火呼吸
+  for (const f of FLIES) f.m.opacity = 0.45 + 0.4 * Math.sin(elapsed * 2 + f.ph);
   // 海星岸浪呼吸
   for (const f of FOAMS) {
     const s = 1 + Math.sin(elapsed * 0.9 + f.userData.ph) * 0.012;
