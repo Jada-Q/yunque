@@ -313,13 +313,23 @@ let playerBody;
 }
 player.position.set(2, 0, 2);
 scene.add(player);
-// 换上行者模型（舍筏同款斗笠人；加载失败保留胶囊）
-new GLTFLoader().load('/models/player.glb', (g) => {
+// 云阙旅人（飞行帽信使；加载失败保留胶囊）+ 三角翼（滑翔时展开）
+let wing = null;
+new GLTFLoader().load('/models/traveler.glb', (g) => {
   g.scene.traverse(o => { if (o.isMesh) o.castShadow = true; });
   toonify(g.scene);
   addOutline(g.scene);
   player.remove(playerBody);
   player.add(g.scene);
+}, undefined, () => {});
+new GLTFLoader().load('/models/wing.glb', (g) => {
+  g.scene.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  toonify(g.scene);
+  addOutline(g.scene, 1.02);
+  wing = g.scene;
+  wing.position.set(0, 1.18, 0.08);
+  wing.visible = false;
+  player.add(wing);
 }, undefined, () => {});
 
 // ---------- 状态与输入 ----------
@@ -393,6 +403,8 @@ function tick() {
     player.position.z = THREE.MathUtils.clamp(player.position.z, P.z0 + 0.5, P.z1 - 0.5);
     player.position.y = P.y;
     player.rotation.x = 0;
+    player.rotation.z += (0 - player.rotation.z) * k;  // 落地回正
+    if (wing) wing.visible = false;                    // 收翼
 
     camera.position.lerp(new THREE.Vector3(
       player.position.x + CFG.cam.offset[0],
@@ -432,9 +444,12 @@ function tick() {
       player.position.y += G.updraftLift * dt;
     }
 
-    // 身体姿态跟飞行方向
+    // 身体姿态跟飞行方向 + 转向压坡度；展翼
+    if (wing) wing.visible = true;
     player.rotation.y = state.yaw;
-    player.rotation.x = -state.pitch * 0.8;
+    player.rotation.x = -state.pitch * 0.8 + 0.5; // 滑翔时身体前倾吊在翼下
+    const turnIn = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0);
+    player.rotation.z += ((-turnIn * 0.5) - player.rotation.z) * (1 - Math.exp(-6 * dt));
 
     // 出发台豁免：飞出其水平边界（或爬升超其上方 3m）后解除
     if (state.launchGrace) {
