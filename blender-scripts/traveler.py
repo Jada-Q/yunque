@@ -81,20 +81,20 @@ m_eye = M('eye', '2c2420')
 
 # 腿×2 + 圆头小靴
 for sx in (-0.10, 0.10):
-    add(bpy.ops.mesh.primitive_cylinder_add, m_dark, vertices=8, radius=0.055, depth=0.2, location=(sx, 0, 0.2))
+    add(bpy.ops.mesh.primitive_cylinder_add, m_dark, vertices=8, radius=0.052, depth=0.3, location=(sx, 0, 0.24))
     b = add(bpy.ops.mesh.primitive_uv_sphere_add, m_dark, segments=8, ring_count=6, radius=0.085, location=(sx, -0.03, 0.09))
     b.scale = (1, 1.25, 0.75)
 # 短身圆袍（下摆微张）
-body = add(bpy.ops.mesh.primitive_cone_add, m_bone, vertices=12, radius1=0.30, radius2=0.19, depth=0.52, location=(0, 0, 0.55))
-hem = add(bpy.ops.mesh.primitive_torus_add, m_bone, major_radius=0.285, minor_radius=0.035, location=(0, 0, 0.31))
+body = add(bpy.ops.mesh.primitive_cone_add, m_bone, vertices=12, radius1=0.28, radius2=0.19, depth=0.44, location=(0, 0, 0.60))
+hem = add(bpy.ops.mesh.primitive_torus_add, m_bone, major_radius=0.265, minor_radius=0.032, location=(0, 0, 0.39))
 # 腰带+铜扣
 add(bpy.ops.mesh.primitive_cylinder_add, m_dark, vertices=12, radius=0.245, depth=0.06, location=(0, 0, 0.52))
 add(bpy.ops.mesh.primitive_cube_add, m_brass, size=0.07, location=(0, -0.24, 0.52))
 # 手臂×2（微张开）+ 圆手
 for sx in (-1, 1):
-    a = add(bpy.ops.mesh.primitive_cylinder_add, m_bone, vertices=8, radius=0.05, depth=0.34, location=(sx * 0.30, 0, 0.66))
-    a.rotation_euler = (0, sx * math.radians(24), 0)
-    add(bpy.ops.mesh.primitive_uv_sphere_add, m_skin, segments=8, ring_count=6, radius=0.065, location=(sx * 0.37, 0, 0.48))
+    a = add(bpy.ops.mesh.primitive_cylinder_add, m_bone, vertices=8, radius=0.05, depth=0.3, location=(sx * 0.27, 0, 0.63))
+    a.rotation_euler = (0, sx * math.radians(7), 0)
+    add(bpy.ops.mesh.primitive_uv_sphere_add, m_skin, segments=8, ring_count=6, radius=0.062, location=(sx * 0.295, 0, 0.45))
 # 围巾：颈圈 + 一条向后扬起的飘带（在风里）
 sc = add(bpy.ops.mesh.primitive_torus_add, m_rust, major_radius=0.14, minor_radius=0.05, location=(0, 0, 0.84))
 tail1 = add(bpy.ops.mesh.primitive_cube_add, m_rust, size=1, location=(0.06, 0.24, 0.90))
@@ -108,16 +108,18 @@ head = add(bpy.ops.mesh.primitive_uv_sphere_add, m_skin, segments=14, ring_count
 # 头发：罩住后脑的半球 + 额前一撮呆毛
 hair = add(bpy.ops.mesh.primitive_uv_sphere_add, m_hair, segments=12, ring_count=8, radius=0.355, location=(0, 0.03, 1.23))
 hair.scale = (1, 1, 0.82)
-fringe = add(bpy.ops.mesh.primitive_uv_sphere_add, m_hair, segments=8, ring_count=5, radius=0.12, location=(0.1, -0.28, 1.38))
-fringe.scale = (1.2, 0.7, 0.7)
+fringe = add(bpy.ops.mesh.primitive_uv_sphere_add, m_hair, segments=10, ring_count=6, radius=0.16, location=(0, -0.27, 1.37))
+fringe.scale = (1.9, 0.62, 0.62)
 tuft = add(bpy.ops.mesh.primitive_cone_add, m_hair, vertices=6, radius1=0.05, radius2=0, depth=0.16, location=(0.02, 0.02, 1.58))
 tuft.rotation_euler = (math.radians(-15), 0, math.radians(12))
 # 护目镜推在发际上（信使的身份记号）
-band = add(bpy.ops.mesh.primitive_torus_add, m_dark, major_radius=0.34, minor_radius=0.035, location=(0, 0, 1.30))
-band.rotation_euler = (math.radians(14), 0, 0)
-for sx in (-0.12, 0.12):
-    g = add(bpy.ops.mesh.primitive_cylinder_add, m_brass, vertices=10, radius=0.075, depth=0.05, location=(sx, -0.30, 1.34))
-    g.rotation_euler = (math.radians(76), 0, 0)
+band = add(bpy.ops.mesh.primitive_torus_add, m_dark, major_radius=0.315, minor_radius=0.024, location=(0, 0.02, 1.45))
+band.rotation_euler = (math.radians(-12), 0, 0)  # 前高后低:后段埋进头发,不再像光圈
+for sx in (-0.11, 0.11):
+    g = add(bpy.ops.mesh.primitive_cylinder_add, m_brass, vertices=10, radius=0.06, depth=0.045, location=(sx, -0.245, 1.50))
+    g.rotation_euler = (math.radians(64), 0, 0)
+    gl = add(bpy.ops.mesh.primitive_cylinder_add, m_dark, vertices=10, radius=0.042, depth=0.05, location=(sx, -0.253, 1.503))
+    gl.rotation_euler = (math.radians(64), 0, 0)
 # 点眼睛×2（有了眼睛才是"人"）
 for sx in (-0.115, 0.115):
     add(bpy.ops.mesh.primitive_uv_sphere_add, m_eye, segments=7, ring_count=5, radius=0.032, location=(sx, -0.315, 1.16))
