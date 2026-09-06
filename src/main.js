@@ -5,9 +5,19 @@ import * as THREE from 'three';
 const CFG = {
   playerSpeed: 4.0,
   cam: { offset: [3.5, 3.6, 9.5], fov: 55, lookAhead: [-7, 0.2, -15] },
-  platform: { x0: -7, x1: 8, z0: -8, z1: 8 },   // 可行走范围（x1 侧连巨构墙）
+  platform: { x0: -7, x1: 8, z0: -8, z1: 8, y: 0 },   // 主平台（x1 侧连巨构墙）
   cloudY: -26,
   night: 0x0d1526,
+  // 滑翔物理（全部手感参数在此，调参不改逻辑）
+  glide: {
+    launchSpeed: 10, minSpeed: 6, maxSpeed: 30, baseSpeed: 11,
+    pitchRate: 1.2, yawRate: 1.7,
+    pitchMin: -0.95, pitchMax: 0.45,
+    accelFromDive: 14, drag: 0.55,
+    stallSink: 4.5,          // 低速失速下坠
+    updraftLift: 7.5,
+    camDist: 9, camUp: 3, fovGlide: 68,
+  },
 };
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -171,6 +181,43 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
   }
 }
 
+// ---------- 落点塔（两座设计塔：A 低于起点顺滑可达，B 更高需借上升气流） ----------
+const PADS = [
+  { name: 'deck', x0: -7, x1: 8, z0: -8, z1: 8, y: 0 },
+  { name: 'towerA', x0: -94, x1: -76, z0: -39, z1: -21, y: -4 },
+  { name: 'towerB', x0: -160, x1: -140, z0: 31, z1: 49, y: 7 },
+];
+function buildPadTower(pad) {
+  const cx = (pad.x0 + pad.x1) / 2, cz = (pad.z0 + pad.z1) / 2;
+  const r = (pad.x1 - pad.x0) / 2;
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.8, 1.2, 12), mat(0x5a5040));
+  disc.position.set(cx, pad.y - 0.6, cz);
+  disc.receiveShadow = true;
+  scene.add(disc);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.35, r * 0.5, 90, 10), mat(0x3d3830));
+  shaft.position.set(cx, pad.y - 46, cz);
+  scene.add(shaft);
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), new THREE.MeshBasicMaterial({ color: 0x9fd8ff }));
+  beacon.position.set(cx, pad.y + 4.5, cz);
+  scene.add(beacon);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 4.5, 6), mat(0x3d3830));
+  pole.position.set(cx, pad.y + 2.25, cz);
+  scene.add(pole);
+}
+buildPadTower(PADS[1]);
+buildPadTower(PADS[2]);
+
+// 上升气流柱（去塔 B 的钥匙）：可见的淡光柱
+const UPDRAFT = { x: -110, z: 8, r: 11, top: 30 };
+{
+  const col = new THREE.Mesh(
+    new THREE.CylinderGeometry(UPDRAFT.r, UPDRAFT.r, UPDRAFT.top - CFG.cloudY, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xbfe0ff, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false })
+  );
+  col.position.set(UPDRAFT.x, (UPDRAFT.top + CFG.cloudY) / 2, UPDRAFT.z);
+  scene.add(col);
+}
+
 // ---------- 玩家 ----------
 const player = new THREE.Group();
 {
@@ -182,43 +229,156 @@ const player = new THREE.Group();
 player.position.set(2, 0, 2);
 scene.add(player);
 
-// ---------- 输入与主循环 ----------
+// ---------- 状态与输入 ----------
+const G = CFG.glide;
+const state = {
+  mode: 'walk',            // walk | glide
+  pad: PADS[0],
+  yaw: Math.PI,            // 面向 -z? 起飞方向由行走朝向决定
+  pitch: 0,
+  speed: 0,
+  toastTimer: 0,
+};
 const keys = {};
-addEventListener('keydown', e => keys[e.code] = true);
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space' && state.mode === 'walk') launch();
+});
 addEventListener('keyup', e => keys[e.code] = false);
 
+const toastEl = document.getElementById('toast');
+function toast(text, ms = 1600) {
+  toastEl.textContent = text;
+  toastEl.style.opacity = 1;
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => (toastEl.style.opacity = 0), ms);
+}
+
+function launch() {
+  state.mode = 'glide';
+  state.yaw = player.rotation.y;
+  state.pitch = -0.12;
+  state.speed = G.launchSpeed;
+  state.launchGrace = state.pad; // 未飞出出发台边界前，不判定落回它
+  player.position.y += 1.2; // 跃起
+}
+
+function respawn() {
+  toast('坠入云海');
+  state.mode = 'walk';
+  state.pad = PADS[0];
+  player.position.set(2, 0, 2);
+  player.rotation.set(0, Math.PI, 0);
+  camera.fov = CFG.cam.fov;
+  camera.updateProjectionMatrix();
+}
+
+// ---------- 主循环 ----------
 const clock = new THREE.Clock();
 const dir = new THREE.Vector3();
+const fwd = new THREE.Vector3();
 camera.position.set(player.position.x + CFG.cam.offset[0], CFG.cam.offset[1], player.position.z + CFG.cam.offset[2]);
 
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
-  dir.set(
-    (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0),
-    0,
-    (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0)
-  );
-  // 相机在 +z 后方看 -z 向：屏幕上 = -z，屏幕左 = +x？——灰盒期先用世界轴，体感期校准
-  if (dir.lengthSq() > 0) {
-    dir.normalize().multiplyScalar(CFG.playerSpeed * dt);
-    player.position.add(dir);
-    player.rotation.y = Math.atan2(dir.x, dir.z);
-  }
-  const P = CFG.platform;
-  player.position.x = THREE.MathUtils.clamp(player.position.x, P.x0 + 0.5, P.x1 - 0.5);
-  player.position.z = THREE.MathUtils.clamp(player.position.z, P.z0 + 0.5, P.z1 - 0.5);
-
   const k = 1 - Math.exp(-5 * dt);
-  camera.position.lerp(new THREE.Vector3(
-    player.position.x + CFG.cam.offset[0],
-    CFG.cam.offset[1],
-    player.position.z + CFG.cam.offset[2]
-  ), k);
-  camera.lookAt(
-    player.position.x + CFG.cam.lookAhead[0],
-    CFG.cam.lookAhead[1],
-    player.position.z + CFG.cam.lookAhead[2]
-  );
+
+  if (state.mode === 'walk') {
+    dir.set(
+      (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0),
+      0,
+      (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0)
+    );
+    if (dir.lengthSq() > 0) {
+      dir.normalize().multiplyScalar(CFG.playerSpeed * dt);
+      player.position.add(dir);
+      player.rotation.y = Math.atan2(dir.x, dir.z);
+    }
+    const P = state.pad;
+    player.position.x = THREE.MathUtils.clamp(player.position.x, P.x0 + 0.5, P.x1 - 0.5);
+    player.position.z = THREE.MathUtils.clamp(player.position.z, P.z0 + 0.5, P.z1 - 0.5);
+    player.position.y = P.y;
+    player.rotation.x = 0;
+
+    camera.position.lerp(new THREE.Vector3(
+      player.position.x + CFG.cam.offset[0],
+      P.y + CFG.cam.offset[1],
+      player.position.z + CFG.cam.offset[2]
+    ), k);
+    camera.lookAt(
+      player.position.x + CFG.cam.lookAhead[0],
+      P.y + CFG.cam.lookAhead[1],
+      player.position.z + CFG.cam.lookAhead[2]
+    );
+    if (camera.fov !== CFG.cam.fov) {
+      camera.fov += (CFG.cam.fov - camera.fov) * k;
+      camera.updateProjectionMatrix();
+    }
+  } else {
+    // ---- 滑翔 ----
+    state.yaw += ((keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0)) * G.yawRate * dt;
+    state.pitch += ((keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0)) * G.pitchRate * dt;
+    state.pitch = THREE.MathUtils.clamp(state.pitch, G.pitchMin, G.pitchMax);
+
+    // 能量模型：俯冲加速，平飞缓降回基速；低速失速下沉
+    state.speed += (Math.sin(-state.pitch) * G.accelFromDive - (state.speed - G.baseSpeed) * G.drag) * dt;
+    state.speed = THREE.MathUtils.clamp(state.speed, G.minSpeed, G.maxSpeed);
+
+    fwd.set(
+      Math.sin(state.yaw) * Math.cos(state.pitch),
+      Math.sin(state.pitch),
+      Math.cos(state.yaw) * Math.cos(state.pitch)
+    );
+    player.position.addScaledVector(fwd, state.speed * dt);
+    if (state.speed < G.minSpeed + 1.5) player.position.y -= G.stallSink * dt;
+
+    // 上升气流
+    const du = Math.hypot(player.position.x - UPDRAFT.x, player.position.z - UPDRAFT.z);
+    if (du < UPDRAFT.r && player.position.y < UPDRAFT.top) {
+      player.position.y += G.updraftLift * dt;
+    }
+
+    // 身体姿态跟飞行方向
+    player.rotation.y = state.yaw;
+    player.rotation.x = -state.pitch * 0.8;
+
+    // 出发台豁免：飞出其水平边界（或爬升超其上方 3m）后解除
+    if (state.launchGrace) {
+      const LP = state.launchGrace;
+      const inside = player.position.x > LP.x0 && player.position.x < LP.x1 &&
+                     player.position.z > LP.z0 && player.position.z < LP.z1;
+      if (!inside || player.position.y > LP.y + 3) state.launchGrace = null;
+    }
+    // 落台判定：水平在台内 + 高度贴台面 + 在下降
+    for (const P of PADS) {
+      if (P === state.launchGrace) continue;
+      if (player.position.x > P.x0 && player.position.x < P.x1 &&
+          player.position.z > P.z0 && player.position.z < P.z1 &&
+          player.position.y > P.y - 0.4 && player.position.y < P.y + 1.4 &&
+          state.pitch <= 0.05) {
+        state.mode = 'walk';
+        state.pad = P;
+        player.position.y = P.y;
+        player.rotation.x = 0;
+        toast(P.name === 'deck' ? '归台' : '落');
+        break;
+      }
+    }
+    // 坠云重生
+    if (player.position.y < CFG.cloudY + 2) respawn();
+
+    // 追飞相机：拉在身后，速度越快视野越阔
+    if (state.mode === 'glide') {
+      const camTarget = player.position.clone().addScaledVector(fwd, -G.camDist);
+      camTarget.y += G.camUp;
+      camera.position.lerp(camTarget, 1 - Math.exp(-4 * dt));
+      const look = player.position.clone().addScaledVector(fwd, 6);
+      camera.lookAt(look);
+      const fovT = CFG.cam.fov + (G.fovGlide - CFG.cam.fov) * ((state.speed - G.minSpeed) / (G.maxSpeed - G.minSpeed));
+      camera.fov += (fovT - camera.fov) * k;
+      camera.updateProjectionMatrix();
+    }
+  }
 
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
@@ -230,5 +390,5 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-window.__yunque = { player, camera, scene, renderer };
+window.__yunque = { player, camera, scene, renderer, state, PADS, UPDRAFT };
 tick();
