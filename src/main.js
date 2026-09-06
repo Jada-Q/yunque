@@ -884,8 +884,9 @@ function tick() {
     }
   } else {
     // ---- 滑翔 ----
-    state.yaw += ((keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0)) * G.yawRate * dt;
-    state.pitch += ((keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0)) * G.pitchRate * dt;
+    // WASD 走飞行惯例（W俯冲），方向键走直觉惯例（↓俯冲 ↑拉升），两套并存
+    state.yaw += ((keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) - (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0)) * G.yawRate * dt;
+    state.pitch += ((keys['KeyS'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyW'] || keys['ArrowDown'] ? 1 : 0)) * G.pitchRate * dt;
     state.pitch = THREE.MathUtils.clamp(state.pitch, G.pitchMin, G.pitchMax);
 
     // 能量模型：俯冲加速，平飞缓降回基速；低速失速下沉
@@ -912,6 +913,26 @@ function tick() {
     player.rotation.x = -state.pitch * 0.8 + 0.5; // 滑翔时身体前倾吊在翼下
     const turnIn = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0);
     player.rotation.z += ((-turnIn * 0.5) - player.rotation.z) * (1 - Math.exp(-6 * dt));
+
+    // 引力辅助：近星时航向被轻轻拉向星心（降落不再考验准头）
+    {
+      let pull = null, pd = 1e9;
+      for (const P of PLANETS) {
+        if (P === state.planetGrace) continue;
+        const d = player.position.distanceTo(P.center);
+        if (d < P.r + 10 && d < pd) { pd = d; pull = P; }
+      }
+      if (pull) {
+        const to = pull.center.clone().sub(player.position).normalize();
+        const tYaw = Math.atan2(to.x, to.z);
+        let dy2 = tYaw - state.yaw;
+        if (dy2 > Math.PI) dy2 -= 2 * Math.PI;
+        if (dy2 < -Math.PI) dy2 += 2 * Math.PI;
+        state.yaw += dy2 * Math.min(1, 1.6 * dt);
+        const tPitch = Math.asin(THREE.MathUtils.clamp(to.y, -1, 1));
+        state.pitch += (tPitch - state.pitch) * Math.min(1, 1.6 * dt);
+      }
+    }
 
     // 星球捕获：靠近即降落（引力井）
     for (const P of PLANETS) {
