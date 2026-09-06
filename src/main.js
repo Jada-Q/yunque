@@ -195,6 +195,33 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
 }
 
 // ---------- 悬挑平台（玩家站的地方） ----------
+// 过路飞船（氛围层：无碰撞，时不时横穿云海）
+const traffic = [];
+function resetTraffic(t) {
+  t.wait = 7 + Math.random() * 22;          // 下一班间隔
+  t.obj.visible = false;
+  const lane = Math.random();
+  let p0, dir;
+  if (lane < 0.55) {                        // 航线族1：z 向横穿（塔群那侧）
+    const x = -85 - Math.random() * 190;
+    const sgn = Math.random() < 0.5 ? 1 : -1;
+    p0 = new THREE.Vector3(x, 0, -sgn * 350);
+    dir = new THREE.Vector3(0, 0, sgn);
+  } else {                                  // 航线族2：x 向远景斜穿
+    const z = (Math.random() < 0.5 ? -1 : 1) * (130 + Math.random() * 170);
+    const sgn = Math.random() < 0.5 ? 1 : -1;
+    p0 = new THREE.Vector3(-sgn * 350, 0, z);
+    dir = new THREE.Vector3(sgn, 0, 0);
+  }
+  t.obj.rotation.y = Math.atan2(dir.z, -dir.x); // 船艏(-X)对准航向
+  t.vel = dir.multiplyScalar(9 + Math.random() * 12);
+  t.baseY = -18 + Math.random() * 42;           // 有的贴云面半没在云里，有的在高处
+  t.phase = Math.random() * 6;
+  t.obj.position.copy(p0);
+  t.obj.position.y = t.baseY;
+  t.obj.scale.setScalar(0.55 + Math.random() * 0.6);
+}
+
 {
   // 天舟：主平台即系泊的空中飞船（Blender 模型，甲板面 y=0；舷墙自带，替代栏杆）
   new GLTFLoader().load('/models/skyship.glb', (g) => {
@@ -202,6 +229,15 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
     toonify(g.scene);
     addOutline(g.scene, 1.015);
     scene.add(g.scene);
+    // 三条过路船错峰发班
+    for (let i = 0; i < 3; i++) {
+      const c = g.scene.clone(true);
+      scene.add(c);
+      const t = { obj: c, vel: new THREE.Vector3(), wait: 0, baseY: 0, phase: 0 };
+      resetTraffic(t);
+      t.wait = 4 + i * 10;
+      traffic.push(t);
+    }
   }, undefined, () => {
     // 兜底：加载失败给一块素甲板，游戏仍可玩
     const deck = new THREE.Mesh(new THREE.BoxGeometry(22, 0.8, 18), mat(0x7a5a40));
@@ -374,6 +410,7 @@ function respawn() {
 
 // ---------- 主循环 ----------
 const clock = new THREE.Clock();
+let elapsed = 0;
 const dir = new THREE.Vector3();
 const fwd = new THREE.Vector3();
 camera.position.set(player.position.x + CFG.cam.offset[0], CFG.cam.offset[1], player.position.z + CFG.cam.offset[2]);
@@ -381,6 +418,7 @@ const composer = makeComposer(renderer, scene, camera);
 
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
+  elapsed += dt;
   const k = 1 - Math.exp(-5 * dt);
 
   if (state.mode === 'walk') {
@@ -485,6 +523,16 @@ function tick() {
     }
   }
 
+  // --- 过路飞船巡航 ---
+  for (const t of traffic) {
+    if (t.wait > 0) { t.wait -= dt; continue; }
+    t.obj.visible = true;
+    t.obj.position.addScaledVector(t.vel, dt);
+    t.obj.position.y = t.baseY + Math.sin(elapsed * 0.5 + t.phase) * 1.2;
+    t.obj.rotation.z = Math.sin(elapsed * 0.4 + t.phase) * 0.02; // 微倾，像在气流里
+    if (Math.abs(t.obj.position.x) > 380 || Math.abs(t.obj.position.z) > 380) resetTraffic(t);
+  }
+
   composer.render();
   requestAnimationFrame(tick);
 }
@@ -500,5 +548,5 @@ addEventListener('resize', () => {
 toonify(scene);
 addOutline(scene);
 
-window.__yunque = { player, camera, scene, renderer, composer, state, PADS, UPDRAFT };
+window.__yunque = { player, camera, scene, renderer, composer, state, PADS, UPDRAFT, traffic, resetTraffic };
 tick();
