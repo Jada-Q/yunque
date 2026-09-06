@@ -1,0 +1,17 @@
+{
+  "name": "yunque",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3032",
+    "build": "vite build",
+    "preview": "vite preview --port 3032"
+  },
+  "dependencies": {
+    "three": "^0.168.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
