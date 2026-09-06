@@ -1,6 +1,8 @@
 // 云阙 — Phase 1 灰盒 vista
 // 目标只有一个：验证"站在万米高空悬挑平台上"的体感。成败在相机、雾、尺度，不在模型。
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { toonify, addOutline, cloudTexture, makeComposer } from './fx.js';
 
 const CFG = {
   playerSpeed: 4.0,
@@ -24,6 +26,8 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
 document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -31,6 +35,29 @@ scene.background = new THREE.Color(CFG.night);
 scene.fog = new THREE.Fog(0x18243c, 60, 320);
 
 const camera = new THREE.PerspectiveCamera(CFG.cam.fov, innerWidth / innerHeight, 0.1, 1200);
+
+// ---------- 天穹与月 ----------
+{
+  const geo = new THREE.SphereGeometry(950, 24, 16);
+  const colors = [];
+  const pos = geo.attributes.position;
+  const top = new THREE.Color(0x070c1a), horizon = new THREE.Color(0x2a4560);
+  for (let i = 0; i < pos.count; i++) {
+    const t = THREE.MathUtils.clamp(pos.getY(i) / 950, -0.1, 1);
+    const c = horizon.clone().lerp(top, Math.pow(Math.max(t, 0), 0.5));
+    colors.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  const dome = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  dome.userData.outline = true;
+  dome.renderOrder = -2;
+  scene.add(dome);
+  const moonMesh = new THREE.Mesh(new THREE.CircleGeometry(26, 24), new THREE.MeshBasicMaterial({ color: 0xe8eef8, fog: false }));
+  moonMesh.position.set(-420, 330, -640);
+  moonMesh.lookAt(0, 0, 0);
+  moonMesh.userData.outline = true;
+  scene.add(moonMesh);
+}
 
 // 月光（冷）+ 巨构侧的暖光
 const moon = new THREE.DirectionalLight(0xbfd0e8, 1.1);
@@ -60,32 +87,41 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
 
 // ---------- 云海（灰盒：三层大面片 + 近处云团） ----------
 {
+  // 云海底盘：不受雾、不受光的自亮面（月照云海的底色）
   const layer = (y, color, op, size) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
-      new THREE.MeshStandardMaterial({ color, transparent: true, opacity: op }));
+      new THREE.MeshBasicMaterial({ color, transparent: op < 1, opacity: op, fog: false }));
     m.rotation.x = -Math.PI / 2;
     m.position.y = y;
+    m.userData.outline = true;
     scene.add(m);
     return m;
   };
-  layer(CFG.cloudY - 2, 0xe8ecf2, 1.0, 1600);
-  layer(CFG.cloudY - 8, 0xb8c2d2, 1.0, 1600);
-  // 云团两波：近处大团（深度锚）+ 远处成脊的云山（月光下发亮）
-  const lumpMat = mat(0xeef1f6, { emissive: 0x3a4560, emissiveIntensity: 0.35 });
-  const addLump = (x, z, r, squash) => {
-    const lump = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), lumpMat);
-    lump.position.set(x, CFG.cloudY + r * squash * 0.55, z);
-    lump.scale.y = squash;
-    scene.add(lump);
+  layer(CFG.cloudY - 2, 0x8fa3c0, 1.0, 1300);
+  layer(CFG.cloudY - 8, 0x64789a, 1.0, 1300);
+  // 云片 billboard：柔边贴图，近团 + 全向远脊两波
+  const tex = cloudTexture();
+  const nearMats = Array.from({ length: 6 }, (_, i) => new THREE.SpriteMaterial({
+    map: tex, transparent: true, opacity: 0.92, depthWrite: false,
+    rotation: (i - 3) * 0.16, color: 0xeef2f8, fog: true,
+  }));
+  const farMats = Array.from({ length: 4 }, (_, i) => new THREE.SpriteMaterial({
+    map: tex, transparent: true, opacity: 0.88, depthWrite: false,
+    rotation: (i - 2) * 0.12, color: 0xaebfd6, fog: false, // 远云堤不受雾：月光云山
+  }));
+  const addCloud = (mats, x, z, s, yJit = 0) => {
+    const sp = new THREE.Sprite(mats[(Math.random() * mats.length) | 0]);
+    sp.position.set(x, CFG.cloudY + 2.5 + yJit, z);
+    sp.scale.set(s, s * 0.42, 1);
+    scene.add(sp);
   };
-  for (let i = 0; i < 40; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const d = 22 + Math.random() * 130;
-    addLump(Math.cos(a) * d - 10, Math.sin(a) * d, 6 + Math.random() * 18, 0.22 + Math.random() * 0.14);
+  for (let i = 0; i < 70; i++) {
+    const a = Math.random() * Math.PI * 2, d = 22 + Math.random() * 150;
+    addCloud(nearMats, Math.cos(a) * d - 10, Math.sin(a) * d, 16 + Math.random() * 44, Math.random() * 3);
   }
-  // 远处云脊：一长串大团连成山脉线
-  for (let i = 0; i < 14; i++) {
-    addLump(-120 - Math.random() * 240, -200 + i * 32 + Math.random() * 18, 24 + Math.random() * 30, 0.3);
+  for (let i = 0; i < 44; i++) {
+    const a = Math.random() * Math.PI * 2, d = 240 + Math.random() * 220;
+    addCloud(farMats, Math.cos(a) * d, Math.sin(a) * d, 70 + Math.random() * 130, 2 + Math.random() * 10);
   }
 }
 
@@ -109,11 +145,47 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
   }
   // 亮窗（暖橙小方块，巨构的生命迹象）
   const winMat = new THREE.MeshBasicMaterial({ color: 0xffb066 });
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 130; i++) {
     const win = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.1), winMat);
     win.position.set(9.6 + Math.random() * 3, -50 + Math.random() * 110, -100 + Math.random() * 200);
     win.rotation.y = Math.PI / 2;
     scene.add(win);
+  }
+  // ---- 增密：管线 / 箱簇 / 天线 / 吊臂 ----
+  const gMat = mat(0x4a3a2c), gMat2 = mat(0x32404e);
+  for (let i = 0; i < 14; i++) { // 横向管线
+    const len = 30 + Math.random() * 110;
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.25 + Math.random() * 0.4, 0.25 + Math.random() * 0.4, len, 8), Math.random() < 0.5 ? gMat : gMat2);
+    p.rotation.x = Math.PI / 2;
+    p.position.set(9 + Math.random() * 6, -55 + Math.random() * 120, -60 + Math.random() * 120);
+    scene.add(p);
+  }
+  for (let i = 0; i < 60; i++) { // 小箱簇
+    const s = 0.8 + Math.random() * 2.4;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(s, s * (0.6 + Math.random()), s), Math.random() < 0.6 ? gMat : gMat2);
+    b.position.set(8.6 + Math.random() * 4, -40 + Math.random() * 95, -95 + Math.random() * 190);
+    scene.add(b);
+  }
+  for (let i = 0; i < 10; i++) { // 天线 + 红顶灯
+    const h = 6 + Math.random() * 14;
+    const a = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.15, h, 6), gMat);
+    a.position.set(10 + Math.random() * 8, 55 + Math.random() * 25, -90 + Math.random() * 180);
+    scene.add(a);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff6a5a }));
+    tip.position.copy(a.position); tip.position.y += h / 2 + 0.3;
+    scene.add(tip);
+  }
+  { // 吊臂横过平台上空 + 垂缆 + 吊件
+    const armPost = new THREE.Mesh(new THREE.BoxGeometry(1, 16, 1), gMat2);
+    armPost.position.set(9, 7, -3); scene.add(armPost);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(15, 0.8, 0.8), gMat2);
+    arm.position.set(1.5, 14.6, -3); scene.add(arm);
+    for (const ax of [-4.5, -1, 2.5]) {
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 6.4, 4), gMat);
+      cable.position.set(ax, 11.2, -3); scene.add(cable);
+    }
+    const hook = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 1.6), gMat);
+    hook.position.set(-1, 7.6, -3); scene.add(hook);
   }
 }
 
@@ -150,6 +222,18 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
     scene.add(r);
   };
   railTop(15.5, 0.5, -8, 0); railTop(15.5, 0.5, 8, 0); railTop(16.5, -7, 0, Math.PI / 2);
+  // 甲板杂件：木箱堆 + 灯柱（暖光）
+  const crate = (x, z, s) => {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), mat(0x6a5138));
+    c.position.set(x, s / 2, z); c.castShadow = true; scene.add(c);
+  };
+  crate(6.5, -6, 1.2); crate(5.4, -6.4, 0.9); crate(6.2, -4.9, 0.8); crate(6.1, -5.8, 0.7 );
+  const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 2.6, 8), mat(0x3d3028));
+  lampPost.position.set(-6.2, 1.3, -7.2); scene.add(lampPost);
+  const lampHead = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffc98a }));
+  lampHead.position.set(-6.2, 2.75, -7.2); scene.add(lampHead);
+  const lampLight = new THREE.PointLight(0xffb066, 18, 14, 1.8);
+  lampLight.position.set(-6.2, 2.85, -7.2); scene.add(lampLight);
 }
 
 // ---------- 远处浮塔群 ----------
@@ -220,14 +304,23 @@ const UPDRAFT = { x: -110, z: 8, r: 11, top: 30 };
 
 // ---------- 玩家 ----------
 const player = new THREE.Group();
+let playerBody;
 {
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 4, 12), mat(0xd8d2c0));
-  body.position.y = 0.8;
-  body.castShadow = true;
-  player.add(body);
+  playerBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 4, 12), mat(0xd8d2c0));
+  playerBody.position.y = 0.8;
+  playerBody.castShadow = true;
+  player.add(playerBody);
 }
 player.position.set(2, 0, 2);
 scene.add(player);
+// 换上行者模型（舍筏同款斗笠人；加载失败保留胶囊）
+new GLTFLoader().load('/models/player.glb', (g) => {
+  g.scene.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  toonify(g.scene);
+  addOutline(g.scene);
+  player.remove(playerBody);
+  player.add(g.scene);
+}, undefined, () => {});
 
 // ---------- 状态与输入 ----------
 const G = CFG.glide;
@@ -278,6 +371,7 @@ const clock = new THREE.Clock();
 const dir = new THREE.Vector3();
 const fwd = new THREE.Vector3();
 camera.position.set(player.position.x + CFG.cam.offset[0], CFG.cam.offset[1], player.position.z + CFG.cam.offset[2]);
+const composer = makeComposer(renderer, scene, camera);
 
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -380,7 +474,7 @@ function tick() {
     }
   }
 
-  renderer.render(scene, camera);
+  composer.render();
   requestAnimationFrame(tick);
 }
 
@@ -388,7 +482,12 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
 });
 
-window.__yunque = { player, camera, scene, renderer, state, PADS, UPDRAFT };
+// 全场卡通分档 + 描线（天穹/月/透明体已豁免）
+toonify(scene);
+addOutline(scene);
+
+window.__yunque = { player, camera, scene, renderer, composer, state, PADS, UPDRAFT };
 tick();
