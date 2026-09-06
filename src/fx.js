@@ -97,7 +97,7 @@ export function makeComposer(renderer, scene, camera) {
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight),
-    0.5,    // strength
+    0.55,   // strength
     0.6,    // radius
     0.78    // threshold：压高，云不再洗白，只留灯与信标发光
   );

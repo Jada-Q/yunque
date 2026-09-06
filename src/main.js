@@ -9,7 +9,7 @@ const CFG = {
   cam: { offset: [3.5, 3.6, 9.5], fov: 55, lookAhead: [-7, 0.2, -15] },
   platform: { x0: -7, x1: 8, z0: -8, z1: 8, y: 0 },   // 主平台（x1 侧连巨构墙）
   cloudY: -26,
-  night: 0x0d1526,
+  night: 0x16243e,   // 童话夜:发光的蓝而不是深沉的黑
   // 滑翔物理（全部手感参数在此，调参不改逻辑）
   glide: {
     launchSpeed: 10, minSpeed: 6, maxSpeed: 30, baseSpeed: 11,
@@ -27,12 +27,12 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.32;
 document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(CFG.night);
-scene.fog = new THREE.Fog(0x18243c, 60, 320);
+scene.fog = new THREE.Fog(0x2a3f5e, 60, 320);
 
 const camera = new THREE.PerspectiveCamera(CFG.cam.fov, innerWidth / innerHeight, 0.1, 1200);
 
@@ -41,7 +41,7 @@ const camera = new THREE.PerspectiveCamera(CFG.cam.fov, innerWidth / innerHeight
   const geo = new THREE.SphereGeometry(950, 24, 16);
   const colors = [];
   const pos = geo.attributes.position;
-  const top = new THREE.Color(0x070c1a), horizon = new THREE.Color(0x2a4560);
+  const top = new THREE.Color(0x14264a), horizon = new THREE.Color(0x4a7aa8);
   for (let i = 0; i < pos.count; i++) {
     const t = THREE.MathUtils.clamp(pos.getY(i) / 950, -0.1, 1);
     const c = horizon.clone().lerp(top, Math.pow(Math.max(t, 0), 0.5));
@@ -60,10 +60,10 @@ const camera = new THREE.PerspectiveCamera(CFG.cam.fov, innerWidth / innerHeight
 }
 
 // 月光（冷）+ 巨构侧的暖光
-const moon = new THREE.DirectionalLight(0xbfd0e8, 1.1);
+const moon = new THREE.DirectionalLight(0xcfe0f4, 1.35);
 moon.position.set(-40, 60, 30);
 moon.castShadow = true;
-scene.add(moon, new THREE.AmbientLight(0x2a3550, 1.4));
+scene.add(moon, new THREE.AmbientLight(0x46618c, 1.6));
 const structGlow = new THREE.PointLight(0xff9a4d, 60, 60, 1.8);
 structGlow.position.set(14, 6, 0);
 scene.add(structGlow);
@@ -98,8 +98,8 @@ const cloudSprites = []; // 供缓漂动画
     scene.add(m);
     return m;
   };
-  layer(CFG.cloudY - 2, 0x8fa3c0, 1.0, 1300);
-  layer(CFG.cloudY - 8, 0x64789a, 1.0, 1300);
+  layer(CFG.cloudY - 2, 0xa2b6d2, 1.0, 1300);
+  layer(CFG.cloudY - 8, 0x7d92b2, 1.0, 1300);
   layer(CFG.cloudY + 5, 0xc4d0e2, 0.14, 1300); // 云面上的薄霭（廉价体积感）
   // 云片 billboard：柔边贴图，近团 + 全向远脊两波
   // 双贴图消除重复感；每朵大云顶上再叠一层顶冠 → 积云的体量

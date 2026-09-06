@@ -73,44 +73,65 @@ def render(path, dist=3.2, h=1.4, look=(0, 0, 0.7)):
     if sc.render.engine == 'BLENDER_WORKBENCH':
         pass
 
-# ============ 人物 ============
+# ============ 人物（小王子式可爱比例：大头、短身、围巾飘带、点眼睛） ============
 reset()
 m_bone, m_rust, m_dark, m_brass, m_skin = M('bone', BONE), M('rust', RUST), M('dark', DARK), M('brass', BRASS), M('skin', SKIN)
+m_hair = M('hair', '6b4a33')
+m_eye = M('eye', '2c2420')
 
-# 躯干：短袍(上宽下摆微张)
-add(bpy.ops.mesh.primitive_cone_add, m_bone, vertices=10, radius1=0.34, radius2=0.26, depth=0.62, location=(0, 0, 0.72))
-# 下摆
-add(bpy.ops.mesh.primitive_cone_add, m_bone, vertices=10, radius1=0.38, radius2=0.34, depth=0.18, location=(0, 0, 0.32))
-# 束带
-add(bpy.ops.mesh.primitive_cylinder_add, m_rust, vertices=10, radius=0.30, depth=0.10, location=(0, 0, 0.62))
-# 铜扣
-add(bpy.ops.mesh.primitive_cube_add, m_brass, size=0.09, location=(0, -0.30, 0.62))
-# 腿
-for sx in (-0.12, 0.12):
-    add(bpy.ops.mesh.primitive_cylinder_add, m_dark, vertices=8, radius=0.075, depth=0.26, location=(sx, 0, 0.13))
-    add(bpy.ops.mesh.primitive_cube_add, m_dark, size=0.16, location=(sx, -0.04, 0.045))
-# 手臂(贴身短袖筒)
-for sx in (-0.36, 0.36):
-    a = add(bpy.ops.mesh.primitive_cylinder_add, m_bone, vertices=8, radius=0.075, depth=0.42, location=(sx, 0, 0.82))
-    a.rotation_euler = (0, math.radians(14 if sx > 0 else -14), 0)
-    add(bpy.ops.mesh.primitive_uv_sphere_add, m_skin, segments=8, ring_count=6, radius=0.07, location=(sx * 1.1, 0, 0.58))
-# 头
-add(bpy.ops.mesh.primitive_uv_sphere_add, m_skin, segments=10, ring_count=8, radius=0.24, location=(0, 0, 1.22))
-# 飞行帽(盖到耳)
-add(bpy.ops.mesh.primitive_uv_sphere_add, m_dark, segments=10, ring_count=6, radius=0.255, location=(0, 0, 1.26))
-bpy.context.active_object.scale = (1, 1, 0.82)
-# 护目镜：镜带 + 双镜片
-band = add(bpy.ops.mesh.primitive_cylinder_add, m_rust, vertices=12, radius=0.252, depth=0.07, location=(0, 0, 1.28))
-band.scale = (1, 1, 1)
+# 腿×2 + 圆头小靴
 for sx in (-0.10, 0.10):
-    g = add(bpy.ops.mesh.primitive_cylinder_add, m_brass, vertices=10, radius=0.07, depth=0.05, location=(sx, -0.235, 1.28))
-    g.rotation_euler = (math.radians(90), 0, 0)
-# 背包卷(折叠翼)：斜背的圆筒 + 两道绑带
-pack = add(bpy.ops.mesh.primitive_cylinder_add, m_rust, vertices=10, radius=0.10, depth=0.72, location=(0, 0.33, 0.88))
-pack.rotation_euler = (0, math.radians(90), math.radians(10))
-for sx in (-0.2, 0.22):
-    ring = add(bpy.ops.mesh.primitive_torus_add, m_dark, major_radius=0.107, minor_radius=0.018, location=(sx, 0.33, 0.88 + sx * math.tan(math.radians(10))))
-    ring.rotation_euler = (0, math.radians(90), math.radians(10))
+    add(bpy.ops.mesh.primitive_cylinder_add, m_dark, vertices=8, radius=0.055, depth=0.2, location=(sx, 0, 0.2))
+    b = add(bpy.ops.mesh.primitive_uv_sphere_add, m_dark, segments=8, ring_count=6, radius=0.085, location=(sx, -0.03, 0.09))
+    b.scale = (1, 1.25, 0.75)
+# 短身圆袍（下摆微张）
+body = add(bpy.ops.mesh.primitive_cone_add, m_bone, vertices=12, radius1=0.30, radius2=0.19, depth=0.52, location=(0, 0, 0.55))
+hem = add(bpy.ops.mesh.primitive_torus_add, m_bone, major_radius=0.285, minor_radius=0.035, location=(0, 0, 0.31))
+# 腰带+铜扣
+add(bpy.ops.mesh.primitive_cylinder_add, m_dark, vertices=12, radius=0.245, depth=0.06, location=(0, 0, 0.52))
+add(bpy.ops.mesh.primitive_cube_add, m_brass, size=0.07, location=(0, -0.24, 0.52))
+# 手臂×2（微张开）+ 圆手
+for sx in (-1, 1):
+    a = add(bpy.ops.mesh.primitive_cylinder_add, m_bone, vertices=8, radius=0.05, depth=0.34, location=(sx * 0.30, 0, 0.66))
+    a.rotation_euler = (0, sx * math.radians(24), 0)
+    add(bpy.ops.mesh.primitive_uv_sphere_add, m_skin, segments=8, ring_count=6, radius=0.065, location=(sx * 0.37, 0, 0.48))
+# 围巾：颈圈 + 一条向后扬起的飘带（在风里）
+sc = add(bpy.ops.mesh.primitive_torus_add, m_rust, major_radius=0.14, minor_radius=0.05, location=(0, 0, 0.84))
+tail1 = add(bpy.ops.mesh.primitive_cube_add, m_rust, size=1, location=(0.06, 0.24, 0.90))
+tail1.scale = (0.09, 0.24, 0.035)
+tail1.rotation_euler = (math.radians(18), 0, math.radians(6))
+tail2 = add(bpy.ops.mesh.primitive_cube_add, m_rust, size=1, location=(0.10, 0.46, 0.99))
+tail2.scale = (0.075, 0.2, 0.03)
+tail2.rotation_euler = (math.radians(35), 0, math.radians(10))
+# 大头（占身高近半——可爱比例的关键）
+head = add(bpy.ops.mesh.primitive_uv_sphere_add, m_skin, segments=14, ring_count=11, radius=0.34, location=(0, 0, 1.18))
+# 头发：罩住后脑的半球 + 额前一撮呆毛
+hair = add(bpy.ops.mesh.primitive_uv_sphere_add, m_hair, segments=12, ring_count=8, radius=0.355, location=(0, 0.03, 1.23))
+hair.scale = (1, 1, 0.82)
+fringe = add(bpy.ops.mesh.primitive_uv_sphere_add, m_hair, segments=8, ring_count=5, radius=0.12, location=(0.1, -0.28, 1.38))
+fringe.scale = (1.2, 0.7, 0.7)
+tuft = add(bpy.ops.mesh.primitive_cone_add, m_hair, vertices=6, radius1=0.05, radius2=0, depth=0.16, location=(0.02, 0.02, 1.58))
+tuft.rotation_euler = (math.radians(-15), 0, math.radians(12))
+# 护目镜推在发际上（信使的身份记号）
+band = add(bpy.ops.mesh.primitive_torus_add, m_dark, major_radius=0.34, minor_radius=0.035, location=(0, 0, 1.30))
+band.rotation_euler = (math.radians(14), 0, 0)
+for sx in (-0.12, 0.12):
+    g = add(bpy.ops.mesh.primitive_cylinder_add, m_brass, vertices=10, radius=0.075, depth=0.05, location=(sx, -0.30, 1.34))
+    g.rotation_euler = (math.radians(76), 0, 0)
+# 点眼睛×2（有了眼睛才是"人"）
+for sx in (-0.115, 0.115):
+    add(bpy.ops.mesh.primitive_uv_sphere_add, m_eye, segments=7, ring_count=5, radius=0.032, location=(sx, -0.315, 1.16))
+# 腮红两点（欢快感）
+m_blush = M('blush', 'd88a6a')
+for sx in (-0.21, 0.21):
+    bl = add(bpy.ops.mesh.primitive_uv_sphere_add, m_blush, segments=6, ring_count=4, radius=0.035, location=(sx, -0.27, 1.08))
+    bl.scale = (1, 0.5, 0.8)
+# 背上的小翼包
+pack = add(bpy.ops.mesh.primitive_cylinder_add, m_rust, vertices=10, radius=0.085, depth=0.5, location=(0, 0.30, 0.78))
+pack.rotation_euler = (0, math.radians(90), math.radians(8))
+for sxr in (-0.14, 0.16):
+    ring = add(bpy.ops.mesh.primitive_torus_add, m_dark, major_radius=0.09, minor_radius=0.016, location=(sxr, 0.30, 0.78 + sxr * 0.14))
+    ring.rotation_euler = (0, math.radians(90), math.radians(8))
 
 print('CHAR_TRIS=%d' % tris_total())
 export(os.path.join(PROJ, 'public/models/traveler.glb'))
