@@ -508,7 +508,7 @@ const composer = makeComposer(renderer, scene, camera);
 
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
-  elapsed += dt;
+  if (window.__frozen) { requestAnimationFrame(tick); return; } // demo 帧步进时由外部驱动
   const k = 1 - Math.exp(-5 * dt);
 
   if (state.mode === 'walk') {
@@ -613,6 +613,14 @@ function tick() {
     }
   }
 
+  ambientUpdate(dt);
+  composer.render();
+  requestAnimationFrame(tick);
+}
+
+// 氛围层统一步进（tick 与 demo 帧步进共用）
+function ambientUpdate(dt) {
+  elapsed += dt;
   // --- 过路飞船巡航 ---
   for (const t of traffic) {
     if (t.wait > 0) { t.wait -= dt; continue; }
@@ -670,9 +678,6 @@ function tick() {
     c.obj.rotation.y = Math.atan2(dx, dz);
     c.obj.position.y = Math.abs(Math.sin(elapsed * 6)) * 0.03; // 步伐微颠
   }
-
-  composer.render();
-  requestAnimationFrame(tick);
 }
 
 addEventListener('resize', () => {
@@ -687,4 +692,12 @@ toonify(scene);
 addOutline(scene);
 
 window.__yunque = { player, camera, scene, renderer, composer, state, PADS, UPDRAFT, traffic, resetTraffic, creatures, spawnLev };
+// demo 帧步进钩子（__frozen=true 后由录制脚本逐帧驱动）
+window.__demo = {
+  ambient: (dt) => ambientUpdate(dt),
+  render: () => composer.render(),
+  elapsed: () => elapsed,
+  setWing: (v) => { if (wing) wing.visible = v; },
+  hasWing: () => !!wing,
+};
 tick();
