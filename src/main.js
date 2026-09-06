@@ -236,33 +236,31 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, ...ex
   lampLight.position.set(-6.2, 2.85, -7.2); scene.add(lampLight);
 }
 
-// ---------- 远处浮塔群 ----------
+// ---------- 远处浮塔群（Blender 三型实例化；基座没入云海） ----------
 {
-  const towerMat = mat(0x46506a);
-  const towerLit = new THREE.MeshBasicMaterial({ color: 0x9fb4d8 });
-  for (let i = 0; i < 7; i++) {
-    const g = new THREE.Group();
-    const H = 40 + Math.random() * 70;
-    let y = 0;
-    while (y < H) {
-      const s = 2 + Math.random() * 5;
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(s, 4 + Math.random() * 9, s), towerMat);
-      seg.position.y = y;
-      g.add(seg);
-      if (Math.random() < 0.35) {
-        const disc = new THREE.Mesh(new THREE.CylinderGeometry(s * 1.6, s * 1.6, 0.8, 10), towerMat);
-        disc.position.y = y + 2;
-        g.add(disc);
-      }
-      y += 5 + Math.random() * 8;
+  const TOWER_SPOTS = [ // [型, x, z, 缩放, 朝向]
+    ['a', -70, -60, 1.0, 0.3],  ['b', -120, 20, 1.15, 1.2], ['c', -95, 95, 0.9, 2.4],
+    ['a', -175, -115, 1.3, 4.0], ['c', -60, 155, 0.8, 0.9], ['b', -195, 135, 1.25, 5.2],
+    ['a', -235, 30, 1.5, 2.0],   ['c', -150, -175, 1.05, 3.3], ['b', 60, 215, 1.1, 0.5],
+  ];
+  const loader = new GLTFLoader();
+  const loadTower = (k) => new Promise(res => loader.load(`/models/tower-${k}.glb`, g => {
+    g.scene.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    toonify(g.scene);
+    addOutline(g.scene, 1.02);
+    res(g.scene);
+  }, undefined, () => res(null)));
+  Promise.all([loadTower('a'), loadTower('b'), loadTower('c')]).then(([a, b, c]) => {
+    const T = { a, b, c };
+    for (const [k, x, z, s, ry] of TOWER_SPOTS) {
+      if (!T[k]) continue;
+      const inst = T[k].clone(true);
+      inst.position.set(x, CFG.cloudY - 12, z);
+      inst.scale.setScalar(s);
+      inst.rotation.y = ry;
+      scene.add(inst);
     }
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.6, 6, 6), towerLit);
-    tip.position.y = H + 3;
-    g.add(tip);
-    // 塔基起于云线之下，塔身立在云海之上（参考图里塔群与云的关系）
-    g.position.set(-55 - Math.random() * 130, CFG.cloudY + 2 + Math.random() * 6, -140 + Math.random() * 280);
-    scene.add(g);
-  }
+  });
 }
 
 // ---------- 落点塔（两座设计塔：A 低于起点顺滑可达，B 更高需借上升气流） ----------
